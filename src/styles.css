@@ -655,7 +655,7 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 
 /* 折叠后的卡片：整张卡就是"标题那一条"，不露正文面 */
 .card.compact .card-inner {
-  display: flex; flex-direction: column; justify-content: center;   /* 卡片无论多高，标题都在垂直中线 */
+  display: flex; flex-direction: column; justify-content: flex-start;   /* 标题贴着顶部固定距离，拉高卡片时不动 */
   border-radius: 6px;
 }
 .card.compact .card-head {
@@ -663,8 +663,83 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
   line-height: 38px;              /* 单行按行高居中，避免字形基线偏高 */
   padding: 0 10px;
   border-bottom: 0;
+  background: transparent;        /* 整张卡一个颜色：拉高时不会露出另一种底色 */
 }
 
 /* 卡片标题：字号与上下微调（工具条上的 A−/A＋ ↑/↓ 改的就是这两个变量） */
 .card-title { font-size: var(--t-size, 14px); }
 .card-title { transform: translateY(var(--t-off, 0px)); }   /* 图标不跟着动 */
+/* ── 代码块（Typora 式：原地编辑 + 行号 + 语言框）───────────────── */
+.blk-code { position: relative; margin: 4px 0 8px; }
+.blk-code .code-box {
+  display: flex; align-items: stretch;
+  background: #141414; border: 1px solid var(--line); border-radius: 6px;
+  overflow: hidden;
+}
+.blk-code.cur .code-box { border-color: #3b3b3b; }
+.blk-code .code-gutter {
+  flex: 0 0 auto; min-width: 30px; padding: 10px 8px 10px 10px;
+  text-align: right; color: #565656; background: #111;
+  border-right: 1px solid #242424;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: .9em; line-height: 1.65; tab-size: 2; -moz-tab-size: 2;
+  user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums;
+}
+.blk-code .code-main { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.blk-code .code-hl, .blk-code .code-input {
+  margin: 0; border: 0; border-radius: 0; background: transparent;
+  box-sizing: border-box;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: .9em; line-height: 1.65; letter-spacing: 0;
+  tab-size: 2; -moz-tab-size: 2; white-space: pre; word-break: normal;
+  overflow-wrap: normal; padding: 10px 12px;
+}
+.blk-code .code-hl {
+  position: absolute; top: 0; left: 0; width: max-content; min-width: 100%; height: 100%;
+  overflow: hidden; pointer-events: none; color: #d4d4d4;
+  will-change: transform;
+}
+.blk-code .code-hl code { background: none; padding: 0; font: inherit; color: inherit; }
+.blk-code .code-input {
+  position: relative; z-index: 1; display: block; width: 100%;
+  height: 44px; min-height: 44px; resize: none;
+  overflow-x: auto; overflow-y: hidden; outline: none;
+  color: transparent; -webkit-text-fill-color: transparent;
+  caret-color: var(--caret); user-select: text;
+}
+.blk-code .code-input::selection { background: rgba(84, 128, 255, .36); }
+/* 输入法组合期间：把输入框里的候选字显示出来，高亮层先让开 */
+.blk-code.composing .code-hl { visibility: hidden; }
+.blk-code.composing .code-input { color: var(--text); -webkit-text-fill-color: currentColor; }
+.blk-code .code-foot { display: flex; justify-content: flex-end; margin-top: 2px; }
+.blk-code .code-lang {
+  width: 112px; height: 22px; padding: 0 6px; text-align: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  color: var(--muted); outline: none;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 11.5px;
+}
+.blk-code .code-lang:hover { color: var(--text); border-color: #3b3b3b; }
+.blk-code .code-lang:focus { color: var(--text); border-color: var(--accent); }
+.blk-code .code-lang::placeholder { color: var(--faint); }
+
+/* 语言下拉：跟着右下角的语言框出现 */
+.code-lang-menu { min-width: 180px; max-height: 264px; overflow-y: auto; z-index: 240; }
+.code-lang-menu button.active { background: var(--hover); }
+.code-lang-menu .lang-none { color: var(--faint); }
+
+/* 语法着色（深色主题的一套低饱和配色） */
+.tok-com { color: #6a9955; }
+.tok-str { color: #ce9178; }
+.tok-num { color: #b5cea8; }
+.tok-kw { color: #c586c0; }
+.tok-const { color: #569cd6; }
+.tok-type { color: #4ec9b0; }
+.tok-fn { color: #dcdcaa; }
+.tok-var { color: #9cdcfe; }
+.tok-tag { color: #569cd6; }
+.tok-attr { color: #9cdcfe; }
+.tok-key { color: #9cdcfe; }
+.tok-meta { color: #c586c0; }
+.tok-add { color: #6a9955; }
+.tok-del { color: #f48771; }
