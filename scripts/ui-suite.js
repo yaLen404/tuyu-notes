@@ -1736,6 +1736,37 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '直线 + 空心箭头';
   });
 
+  await run('工具条上的「折叠」隐藏卡片正文，再点展开', async () => {
+    // 挑一张本来就有高度的卡片
+    let note = null;
+    for (const n of ws.notesOf()) {
+      const el = document.querySelector('.card[data-id="' + n.id + '"]');
+      if (el && el.getBoundingClientRect().height / c.zoom > 90) { note = n; break; }
+    }
+    if (!note) fail('没有足够高的卡片');
+    f.selectNote(note.id);
+    await wait(300);
+    const card = () => document.querySelector('.card[data-id="' + note.id + '"]');
+    if (!card()) fail('找不到卡片');
+    const hOf = () => Math.round(card().getBoundingClientRect().height / c.zoom);
+    if (!card().querySelector('.card-body')) fail('一开始就没有正文');
+    const h0 = hOf();
+    if (h0 <= 60) fail('起点高度太小：' + h0);
+    const btn = document.getElementById('toolFold');
+    if (!btn) fail('工具条上没有折叠按钮');
+    realClick(btn);
+    await wait(360);
+    if (!card().classList.contains('compact')) fail('没有进入折叠态');
+    if (card().querySelector('.card-body')) fail('折叠后正文还在');
+    const h1 = hOf();
+    if (h1 >= h0) fail('折叠后没有变矮：' + h0 + ' → ' + h1);
+    realClick(btn);
+    await wait(360);
+    if (!card().querySelector('.card-body')) fail('展开后正文没回来');
+    if (Math.abs(hOf() - h0) > 2) fail('展开后高度没还原：' + h0 + ' → ' + hOf());
+    return '高度 ' + h0 + ' → ' + h1 + ' → ' + hOf();
+  });
+
   await run('工具条上的「标记」给卡片打待办，再点取消', async () => {
     const note = ws.notesOf()[0];
     f.selectNote(note.id);

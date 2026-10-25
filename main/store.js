@@ -263,6 +263,8 @@ function normalizeNote(data) {
     content: String(data.content || ''),
     color: typeof data.color === 'string' ? data.color : '',
     todo: Boolean(data.todo),
+    hideBody: Boolean(data.hideBody),     // 折叠正文：只显示标题
+    prevH: Math.max(0, Number(data.prevH) || 0),   // 折叠前的高度，展开时还原
     created: Number(data.created) || nowMs(),
     updated: Number(data.updated) || nowMs(),
     graph: String(data.graph || ''),

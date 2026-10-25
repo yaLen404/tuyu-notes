@@ -18,7 +18,7 @@ const dom = {
   canvas: $('canvas'), world: $('world'), cards: $('cards'), edges: $('edges'),
   edgeLayer: $('edgeLayer'), edgeHitLayer: $('edgeHitLayer'), canvasEmpty: $('canvasEmpty'),
   nodeToolbar: $('nodeToolbar'), swatches: $('swatches'),
-  toolClear: $('toolClear'), toolEdit: $('toolEdit'), toolTodo: $('toolTodo'), toolNew: $('toolNew'), toolDelete: $('toolDelete'),
+  toolClear: $('toolClear'), toolEdit: $('toolEdit'), toolFold: $('toolFold'), toolTodo: $('toolTodo'), toolNew: $('toolNew'), toolDelete: $('toolDelete'),
   linkToolbar: $('linkToolbar'), linkCurve: $('linkCurve'), linkLine: $('linkLine'),
   linkArrowSolid: $('linkArrowSolid'), linkArrowHollow: $('linkArrowHollow'), linkArrowNone: $('linkArrowNone'),
   linkSizeDown: $('linkSizeDown'), linkSizeVal: $('linkSizeVal'), linkSizeUp: $('linkSizeUp'),
@@ -417,6 +417,7 @@ function buildSwatches() {
   dom.toolClear.addEventListener('click', () => setCardColor(''));
   dom.toolEdit.addEventListener('click', () => { if (canvas.selected) pane.focusEditor(); });
   dom.toolNew.addEventListener('click', () => { if (canvas.selected) branchFrom(canvas.selected); });
+  if (dom.toolFold) dom.toolFold.addEventListener('click', () => toggleCardFold());
   if (dom.toolTodo) dom.toolTodo.addEventListener('click', () => toggleNoteTodo());
   dom.toolDelete.addEventListener('click', () => { if (canvas.selected) deleteNote(canvas.selected); });
 }
@@ -441,6 +442,37 @@ function syncSwatches() {
   }
 }
 
+
+/** 折叠 / 展开卡片的正文（只留标题） */
+function toggleCardFold() {
+  const id = canvas.selected;
+  const note = id && ws.note(id);
+  if (!note) return;
+  const rec = canvas.records.get(id);
+  pushUndo();
+  if (note.hideBody) {
+    // 展开：还原折叠前的高度
+    note.hideBody = false;
+    if (rec) {
+      rec.h = Math.max(52, Number(note.prevH) || 140);
+      rec.explicit = true;
+    }
+    note.prevH = 0;
+  } else {
+    // 折叠：记住当前高度，收成一条标题
+    note.prevH = rec ? Math.round(rec.h) : 0;
+    note.hideBody = true;
+    if (rec) {
+      rec.h = 52;
+      rec.explicit = true;
+    }
+  }
+  canvas.persistPositions();
+  canvas.render();
+  canvas.renderEdges();
+  scheduleSave();
+  placeToolbar();
+}
 
 /** 给选中的卡片打"待办"标记（再点一次取消） */
 function toggleNoteTodo() {

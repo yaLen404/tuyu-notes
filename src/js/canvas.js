@@ -310,6 +310,7 @@ export class Canvas {
     const note = rec.note;
     const exists = (t) => Boolean(this.ws.findTitle(t, note.graph));
     const cls = ['card'];
+    if (note.hideBody) cls.push('compact');
     if (note.color) cls.push('colored');
     if (note.id === this.selected) cls.push('selected');
     if (note.id === this.hover) cls.push('hover');
@@ -322,7 +323,7 @@ export class Canvas {
     return `<div class="${cls.join(' ')}" data-id="${note.id}" style="${style}">
       <div class="card-inner">
         <div class="card-head">${ICON}<span class="card-title">${escapeHtml(note.title || '未命名')}</span>${note.todo ? '<span class="card-mark" title="待办"></span>' : ''}</div>
-        <div class="card-body">${body}</div>
+        ${note.hideBody ? '' : `<div class="card-body">${body}</div>`}
       </div>
       <div class="handle" data-corner="nw"></div><div class="handle" data-corner="ne"></div>
       <div class="handle" data-corner="sw"></div><div class="handle" data-corner="se"></div>
