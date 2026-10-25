@@ -655,7 +655,8 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 
 /* 折叠后的卡片：整张卡就是"标题那一条"，不露正文面 */
 .card.compact .card-inner {
-  display: block; border-radius: 6px;
+  display: flex; flex-direction: column; justify-content: center;   /* 卡片无论多高，标题都在垂直中线 */
+  border-radius: 6px;
 }
 .card.compact .card-head {
   height: 38px; flex: 0 0 38px;
