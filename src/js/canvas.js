@@ -14,6 +14,8 @@ const PAD = 12;
 const MIN_W = 120;
 const MAX_W = 720;
 const MIN_H = 52;
+const MIN_H_COMPACT = 33;   // 折叠后只剩标题条
+const minHOf = (note) => (note && note.hideBody ? MIN_H_COMPACT : MIN_H);
 const MAX_H = 760;
 const DEFAULT_LINES = 5;
 const LINE_H = 21;
@@ -213,7 +215,7 @@ export class Canvas {
       const [w0, h0] = this.defaultSize(note);
       const hasSize = Array.isArray(sizes[note.id]);
       const w = hasSize ? Math.max(MIN_W, Math.min(MAX_W, sizes[note.id][0])) : w0;
-      const h = hasSize ? Math.max(MIN_H, Math.min(MAX_H, sizes[note.id][1])) : h0;
+      const h = hasSize ? Math.max(minHOf(note), Math.min(MAX_H, sizes[note.id][1])) : h0;
       const p = Array.isArray(stored[note.id]) ? stored[note.id] : [0, 0];
       this.records.set(note.id, {
         note, x: p[0], y: p[1], w, h, explicit: hasSize,
@@ -852,13 +854,13 @@ export class Canvas {
       d.moved = true;
       let { x, y, w, h } = d;
       if (d.corner.includes('e')) w = Math.max(MIN_W, Math.min(MAX_W, d.w + dx));
-      if (d.corner.includes('s')) h = Math.max(MIN_H, Math.min(MAX_H, d.h + dy));
+      if (d.corner.includes('s')) h = Math.max(minHOf(rec.note), Math.min(MAX_H, d.h + dy));
       if (d.corner.includes('w')) {
         const nw = Math.max(MIN_W, Math.min(MAX_W, d.w - dx));
         x = d.x + (d.w - nw); w = nw;
       }
       if (d.corner.includes('n')) {
-        const nh = Math.max(MIN_H, Math.min(MAX_H, d.h - dy));
+        const nh = Math.max(minHOf(rec.note), Math.min(MAX_H, d.h - dy));
         y = d.y + (d.h - nh); h = nh;
       }
       rec.x = Math.round(x * 100) / 100; rec.y = Math.round(y * 100) / 100;
