@@ -264,6 +264,8 @@ function normalizeNote(data) {
     color: typeof data.color === 'string' ? data.color : '',
     todo: Boolean(data.todo),
     hideBody: Boolean(data.hideBody),     // 折叠正文：只显示标题
+    titleSize: Math.max(10, Math.min(24, Number(data.titleSize) || 14)),   // 卡片标题字号
+    titleOffset: Math.max(-12, Math.min(12, Number(data.titleOffset) || 0)), // 标题上下微调(px)
     prevH: Math.max(0, Number(data.prevH) || 0),   // 折叠前的高度，展开时还原
     created: Number(data.created) || nowMs(),
     updated: Number(data.updated) || nowMs(),

@@ -319,7 +319,7 @@ export class Canvas {
     if (note.id === this.selected) cls.push('selected');
     if (note.id === this.hover) cls.push('hover');
     if (!this.visible(note)) cls.push('dim');
-    const style = [
+    const style = [`--t-size:${note.titleSize || 14}px`, `--t-off:${note.titleOffset || 0}px`, 
       `left:${rec.x}px`, `top:${rec.y}px`, `width:${rec.w}px`, `height:${rec.h}px`,
       note.color ? `--c:${note.color}` : '',
     ].filter(Boolean).join(';');

@@ -18,7 +18,9 @@ const dom = {
   canvas: $('canvas'), world: $('world'), cards: $('cards'), edges: $('edges'),
   edgeLayer: $('edgeLayer'), edgeHitLayer: $('edgeHitLayer'), canvasEmpty: $('canvasEmpty'),
   nodeToolbar: $('nodeToolbar'), swatches: $('swatches'),
-  toolClear: $('toolClear'), toolEdit: $('toolEdit'), toolFold: $('toolFold'), toolTodo: $('toolTodo'), toolNew: $('toolNew'), toolDelete: $('toolDelete'),
+  toolClear: $('toolClear'), toolEdit: $('toolEdit'), toolFold: $('toolFold'),
+  toolFontDown: $('toolFontDown'), toolFontUp: $('toolFontUp'),
+  toolPosUp: $('toolPosUp'), toolPosDown: $('toolPosDown'), toolTodo: $('toolTodo'), toolNew: $('toolNew'), toolDelete: $('toolDelete'),
   linkToolbar: $('linkToolbar'), linkCurve: $('linkCurve'), linkLine: $('linkLine'),
   linkArrowSolid: $('linkArrowSolid'), linkArrowHollow: $('linkArrowHollow'), linkArrowNone: $('linkArrowNone'),
   linkSizeDown: $('linkSizeDown'), linkSizeVal: $('linkSizeVal'), linkSizeUp: $('linkSizeUp'),
@@ -418,6 +420,10 @@ function buildSwatches() {
   dom.toolEdit.addEventListener('click', () => { if (canvas.selected) pane.focusEditor(); });
   dom.toolNew.addEventListener('click', () => { if (canvas.selected) branchFrom(canvas.selected); });
   if (dom.toolFold) dom.toolFold.addEventListener('click', () => toggleCardFold());
+  if (dom.toolFontDown) dom.toolFontDown.addEventListener('click', () => nudgeTitle('size', -1));
+  if (dom.toolFontUp) dom.toolFontUp.addEventListener('click', () => nudgeTitle('size', 1));
+  if (dom.toolPosUp) dom.toolPosUp.addEventListener('click', () => nudgeTitle('offset', -1));
+  if (dom.toolPosDown) dom.toolPosDown.addEventListener('click', () => nudgeTitle('offset', 1));
   if (dom.toolTodo) dom.toolTodo.addEventListener('click', () => toggleNoteTodo());
   dom.toolDelete.addEventListener('click', () => { if (canvas.selected) deleteNote(canvas.selected); });
 }
@@ -442,6 +448,22 @@ function syncSwatches() {
   }
 }
 
+
+/** 微调卡片标题：字号 / 上下位置 */
+function nudgeTitle(field, delta) {
+  const id = canvas.selected;
+  const note = id && ws.note(id);
+  if (!note) return;
+  if (field === 'size') {
+    note.titleSize = Math.max(10, Math.min(24, (Number(note.titleSize) || 14) + delta));
+  } else {
+    note.titleOffset = Math.max(-12, Math.min(12, (Number(note.titleOffset) || 0) + delta));
+  }
+  canvas.render();
+  scheduleSave();
+  placeToolbar();
+  flashStatus('标题 ' + (Number(note.titleSize) || 14) + 'px · 偏移 ' + (Number(note.titleOffset) || 0) + 'px', 1600);
+}
 
 /** 折叠 / 展开卡片的正文（只留标题） */
 function toggleCardFold() {

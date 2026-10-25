@@ -1736,6 +1736,37 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '直线 + 空心箭头';
   });
 
+  await run('工具条能调标题字号和上下位置', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(300);
+    const card = () => document.querySelector('.card[data-id="' + note.id + '"]');
+    const title = () => card().querySelector('.card-title');
+    const fs0 = getComputedStyle(title()).fontSize;
+    realClick(document.getElementById('toolFontUp'));
+    realClick(document.getElementById('toolFontUp'));
+    await wait(320);
+    const fs1 = getComputedStyle(title()).fontSize;
+    if (fs0 === fs1) fail('字号没变：' + fs0);
+    if (Number(ws.note(note.id).titleSize) !== 16) fail('字号没存：' + ws.note(note.id).titleSize);
+
+    realClick(document.getElementById('toolPosDown'));
+    await wait(260);
+    const tf = getComputedStyle(title()).transform;
+    if (!/matrix/.test(tf) || !/, 1\)$/.test(tf)) fail('下移没生效：' + tf);
+    realClick(document.getElementById('toolPosUp'));
+    realClick(document.getElementById('toolPosUp'));
+    await wait(260);
+    if (Number(ws.note(note.id).titleOffset) !== -1) fail('偏移没存：' + ws.note(note.id).titleOffset);
+
+    // 还原，别影响后面的用例
+    ws.note(note.id).titleSize = 14;
+    ws.note(note.id).titleOffset = 0;
+    c.render();
+    await wait(200);
+    return fs0 + ' → ' + fs1 + '，偏移 -1px';
+  });
+
   await run('工具条上的「折叠」隐藏卡片正文，再点展开', async () => {
     // 挑一张本来就有高度的卡片
     let note = null;
@@ -1795,7 +1826,8 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     const rect = c.screenRectOf(note.id);
     if (bar.hidden) fail('工具条没出现');
     const cx = parseFloat(bar.style.left) + bar.offsetWidth / 2;
-    if (Math.abs(cx - (rect.x + rect.w / 2)) > 40) fail('工具条没对准卡片');
+    // 工具条变宽后，贴边时会被夹在视口内，容许更大偏差
+    if (Math.abs(cx - (rect.x + rect.w / 2)) > 90) fail('工具条没对准卡片');
     return '位置正确';
   });
 
