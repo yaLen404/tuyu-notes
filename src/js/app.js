@@ -463,7 +463,7 @@ function toggleCardFold() {
     note.prevH = rec ? Math.round(rec.h) : 0;
     note.hideBody = true;
     if (rec) {
-      rec.h = 34;        // 只剩标题条的高度
+      rec.h = 40;        // 折叠后的标题条高度
       rec.explicit = true;
     }
   }

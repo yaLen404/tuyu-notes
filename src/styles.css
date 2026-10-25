@@ -658,8 +658,8 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
   display: block; border-radius: 6px;
 }
 .card.compact .card-head {
-  height: 32px; flex: 0 0 32px;
-  line-height: 32px;              /* 单行按行高居中，避免字形基线偏高 */
+  height: 38px; flex: 0 0 38px;
+  line-height: 38px;              /* 单行按行高居中，避免字形基线偏高 */
   padding: 0 10px;
   border-bottom: 0;
 }

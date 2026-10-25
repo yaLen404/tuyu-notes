@@ -14,7 +14,7 @@ const PAD = 12;
 const MIN_W = 120;
 const MAX_W = 720;
 const MIN_H = 52;
-const MIN_H_COMPACT = 33;   // 折叠后只剩标题条
+const MIN_H_COMPACT = 39;   // 折叠后只剩标题条
 const minHOf = (note) => (note && note.hideBody ? MIN_H_COMPACT : MIN_H);
 const MAX_H = 760;
 const DEFAULT_LINES = 5;
@@ -217,7 +217,7 @@ export class Canvas {
       const w = hasSize ? Math.max(MIN_W, Math.min(MAX_W, sizes[note.id][0])) : w0;
       let h = hasSize ? Math.max(minHOf(note), Math.min(MAX_H, sizes[note.id][1])) : h0;
     // 折叠卡无论历史高度是多少，一律收成标题条
-    if (note.hideBody && h > 34) h = 34;
+    if (note.hideBody && h > 40) h = 40;
       const p = Array.isArray(stored[note.id]) ? stored[note.id] : [0, 0];
       this.records.set(note.id, {
         note, x: p[0], y: p[1], w, h, explicit: hasSize,
