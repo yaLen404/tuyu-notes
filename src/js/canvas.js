@@ -13,8 +13,8 @@ const HEADER_H = 32;
 const PAD = 12;
 const MIN_W = 120;
 const MAX_W = 720;
-const MIN_H = 52;
-const MIN_H_COMPACT = 39;   // 折叠后只剩标题条
+const MIN_H = 40;
+const MIN_H_COMPACT = 30;   // 折叠后只剩标题条
 const minHOf = (note) => (note && note.hideBody ? MIN_H_COMPACT : MIN_H);
 const MAX_H = 760;
 const DEFAULT_LINES = 5;
