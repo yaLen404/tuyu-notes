@@ -666,4 +666,4 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 
 /* 卡片标题：字号与上下微调（工具条上的 A−/A＋ ↑/↓ 改的就是这两个变量） */
 .card-title { font-size: var(--t-size, 14px); }
-.card-title, .card-icon { transform: translateY(var(--t-off, 0px)); }
+.card-title { transform: translateY(var(--t-off, 0px)); }   /* 图标不跟着动 */
