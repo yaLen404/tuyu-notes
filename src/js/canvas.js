@@ -215,7 +215,9 @@ export class Canvas {
       const [w0, h0] = this.defaultSize(note);
       const hasSize = Array.isArray(sizes[note.id]);
       const w = hasSize ? Math.max(MIN_W, Math.min(MAX_W, sizes[note.id][0])) : w0;
-      const h = hasSize ? Math.max(minHOf(note), Math.min(MAX_H, sizes[note.id][1])) : h0;
+      let h = hasSize ? Math.max(minHOf(note), Math.min(MAX_H, sizes[note.id][1])) : h0;
+    // 折叠卡无论历史高度是多少，一律收成标题条
+    if (note.hideBody && h > 34) h = 34;
       const p = Array.isArray(stored[note.id]) ? stored[note.id] : [0, 0];
       this.records.set(note.id, {
         note, x: p[0], y: p[1], w, h, explicit: hasSize,
