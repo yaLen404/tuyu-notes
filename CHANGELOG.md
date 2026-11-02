@@ -1,12 +1,17 @@
 # 更新记录
 
-## 未发布
+## 1.0.2A — 2026-11-03
 
 **更名：For You Notes → Tuyu Notes（图屿笔记）**
 - 窗口标题、任务栏、页面标题、品牌提示、关于窗口统一改为 Tuyu Notes / 图屿笔记
 - npm 包名改为 `tuyu-notes`，AppUserModelID 改为 `com.yalen.tuyunotes`
 - 数据目录改为 `%LOCALAPPDATA%\TuyuNotes\data`；首次启动会把旧 `ForYouNotes` 的笔记、图片、备份复制过来，旧目录不删
 - 环境变量新增 `TUYU_DATA_DIR`，仍兼容旧的 `FYN_DATA_DIR`
+
+**新增：Windows 安装包**
+- 配置 electron-builder / NSIS，生成 `TuyuNotes-Setup-1.0.2A.exe`
+- 安装向导可选择安装目录，创建桌面 / 开始菜单「图屿笔记」快捷方式
+- 安装、卸载都不删除 `%LOCALAPPDATA%\TuyuNotes\data` 里的笔记
 
 ## 1.0.2 — 2026-11-03
 

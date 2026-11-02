@@ -30,6 +30,7 @@ function createWindow(options = {}) {
     skipTaskbar: !show,        // 自检/截图用的隐藏窗口不进任务栏、不占屏幕
     backgroundColor: '#161616',
     title: 'Tuyu Notes',
+    icon: path.join(__dirname, '..', 'assets', 'tuyu.ico'),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,

@@ -1,6 +1,6 @@
 {
   "name": "tuyu-notes",
-  "version": "1.0.2",
+  "version": "1.0.2-a",
   "description": "图屿笔记 Tuyu Notes：本地优先的双栏知识图谱笔记",
   "main": "main.js",
   "type": "commonjs",
@@ -8,12 +8,60 @@
     "start": "electron .",
     "test": "node --test \"test/*.test.mjs\"",
     "uitest": "electron scripts/uitest.js",
-    "capture": "electron scripts/capture.js"
+    "capture": "electron scripts/capture.js",
+    "dist": "electron-builder --win nsis --x64"
   },
   "author": "yaLen",
   "license": "MIT",
   "devDependencies": {
     "electron": "^44.9.0",
+    "electron-builder": "^26.18.0",
     "katex": "^0.19.0"
+  },
+  "build": {
+    "appId": "com.yalen.tuyunotes",
+    "productName": "Tuyu Notes",
+    "copyright": "Copyright © 2026 yaLen",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "main/**/*",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/tuyu.ico",
+      "executableName": "TuyuNotes",
+      "artifactName": "TuyuNotes-Setup-1.0.2A.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "图屿笔记",
+      "uninstallDisplayName": "图屿笔记 Tuyu Notes",
+      "installerIcon": "assets/tuyu.ico",
+      "uninstallerIcon": "assets/tuyu.ico",
+      "installerHeaderIcon": "assets/tuyu.ico",
+      "deleteAppDataOnUninstall": false
+    }
   }
 }
