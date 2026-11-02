@@ -44,7 +44,7 @@
 
 ## Windows 安装
 
-从 [Releases](https://github.com/yaLen404/for-you-notes/releases) 下载
+从 [Releases](https://github.com/yaLen404/tuyu-notes/releases) 下载
 `TuyuNotes-Setup-1.0.2A.exe`，双击安装即可：
 
 - 64 位 Windows 10 / 11；
@@ -57,8 +57,8 @@
 需要 Node.js 18+。
 
 ```bash
-git clone https://github.com/yaLen404/for-you-notes.git
-cd for-you-notes
+git clone https://github.com/yaLen404/tuyu-notes.git
+cd tuyu-notes
 npm install
 npm start
 ```
