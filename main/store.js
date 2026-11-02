@@ -2,10 +2,11 @@
 /**
  * 数据层：笔记 / 图 / 工作区状态的读写、自动备份、旧数据迁移。
  *
- * 和 Python 版完全兼容：
- *   %LOCALAPPDATA%\ForYouNotes\data\
+ * 数据目录：
+ *   %LOCALAPPDATA%\TuyuNotes\data\
  *     notes\<id>.json
  *     app.json
+ *     image\
  *     backups\backup-YYYYMMDD-HHMMSS.json
  *
  * 写入一律「临时文件 + rename」，不会写一半断电留下坏文件。
@@ -28,6 +29,12 @@ function newId(prefix) {
 }
 
 function defaultDataDir() {
+  const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+  return path.join(base, 'TuyuNotes', 'data');
+}
+
+/** 更名前的数据目录：首次启动时复制到 TuyuNotes，旧目录保留。 */
+function legacyDefaultDataDir() {
   const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
   return path.join(base, 'ForYouNotes', 'data');
 }
@@ -238,6 +245,19 @@ class Store {
     if (fs.existsSync(legacyState) && !fs.existsSync(this.statePath)) {
       try { fs.copyFileSync(legacyState, this.statePath); } catch (_e) { /* ignore */ }
     }
+    // 图片和备份也一起搬，否则旧笔记里的 ![[图片]] 会变成空图
+    for (const sub of ['image', 'backups']) {
+      const from = path.join(legacyDir, sub);
+      const to = path.join(this.dataDir, sub);
+      if (!fs.existsSync(from)) continue;
+      try {
+        fs.mkdirSync(to, { recursive: true });
+        for (const name of fs.readdirSync(from)) {
+          const target = path.join(to, name);
+          if (!fs.existsSync(target)) fs.copyFileSync(path.join(from, name), target);
+        }
+      } catch (_e) { /* ignore */ }
+    }
     return copied > 0;
   }
 }
@@ -311,6 +331,6 @@ function normalizeState(state, notes) {
 }
 
 module.exports = {
-  Store, defaultDataDir, normalizeNote, normalizeState, newId, nowMs,
+  Store, defaultDataDir, legacyDefaultDataDir, normalizeNote, normalizeState, newId, nowMs,
   KEEP_BACKUPS, BACKUP_INTERVAL,
 };

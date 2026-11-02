@@ -7,7 +7,7 @@ import { escapeHtml } from './markdown.js';
 import * as geometry from './geometry.js';
 
 const $ = (id) => document.getElementById(id);
-const api = window.foryou;
+const api = window.tuyu;
 
 const dom = {
   titlebar: $('titlebar'),
@@ -759,7 +759,7 @@ function menuSpec(name) {
   }
   return [
     { label: '使用说明', accel: 'F1', action: () => showHelp() },
-    { label: '关于 For You Notes', action: () => showAbout() },
+    { label: '关于图屿笔记', action: () => showAbout() },
   ];
 }
 
@@ -1259,13 +1259,13 @@ function showHelp() {
 }
 
 function showAbout() {
-  modal('关于 For You Notes', `
+  modal('关于图屿笔记', `
     <div class="help">
-      <p><strong>For You Notes 1.0.2</strong></p>
+      <p><strong>图屿笔记 · Tuyu Notes 1.0.2</strong></p>
       <p>一个装在自己电脑上的双栏笔记程序：左栏是知识体系图，右栏是选中笔记的内容。
          笔记、图片、备份都存在本机，<b>不联网也能用</b>，也不会上传任何内容。</p>
-      <p>数据放在 %LOCALAPPDATA%\\ForYouNotes\\data：一篇笔记一个 JSON 文件，图片在 data\\image，
-         备份在 data\\backups。</p>
+      <p>数据放在 %LOCALAPPDATA%\\TuyuNotes\\data：一篇笔记一个 JSON 文件，图片在 data\\image，
+         备份在 data\\backups。旧版 ForYouNotes 数据会在首次启动时自动复制过来，旧目录不删。</p>
       <p>退出时自动保存，关窗口前还会再存一次；分栏比例、字号、上次看的那篇笔记都会记住。</p>
     </div>`);
 }

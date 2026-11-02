@@ -3,7 +3,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('foryou', {
+contextBridge.exposeInMainWorld('tuyu', {
   load: () => ipcRenderer.invoke('store:load'),
   saveAll: (state, notes) => ipcRenderer.invoke('store:save-all', { state, notes }),
   saveNote: (note) => ipcRenderer.invoke('store:save-note', note),

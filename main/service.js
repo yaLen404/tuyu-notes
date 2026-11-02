@@ -4,7 +4,7 @@
 const path = require('path');
 const fs = require('fs');
 const { ipcMain, shell, dialog, protocol, app, clipboard } = require('electron');
-const { Store } = require('./store');
+const { Store, legacyDefaultDataDir } = require('./store');
 const { clampBounds, flushWindow } = require('./window');
 
 // 图片走私有协议：fyn-img://local/<文件名>。
@@ -33,6 +33,10 @@ let win = null;
 
 function initService({ dataDir, legacyDir, getWindow }) {
   store = new Store(dataDir);
+  // 显式指定 dataDir 的测试 / 截图不碰真实用户数据
+  if (!dataDir) {
+    try { store.migrateLegacy(legacyDefaultDataDir()); } catch (_e) { /* ignore */ }
+  }
   if (legacyDir) {
     try { store.migrateLegacy(legacyDir); } catch (_e) { /* ignore */ }
   }

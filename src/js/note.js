@@ -622,7 +622,7 @@ export class NotePane {
     if (!Number.isFinite(si) || !Number.isFinite(ei)) return false;
     if (si === ei && !(r.startContainer === host)) return false;   // 单块内交给浏览器
     if (opts.copy) {
-      const clip = window.foryou && window.foryou.clipboard;
+      const clip = window.tuyu && window.tuyu.clipboard;
       if (clip) clip.write(String(sel.toString() || ''));
     }
     const target = this._blocks[si];
@@ -1638,7 +1638,7 @@ export class NotePane {
         if (act === 'type') { this.openTypeSubMenu(picked, btn); return; }
         this.closeBlockMenu();
         if (act === 'copy' || act === 'cut') {
-          const clip = window.foryou && window.foryou.clipboard;
+          const clip = window.tuyu && window.tuyu.clipboard;
           if (clip) clip.write(this.selectedText());
         }
         if (act === 'del' || act === 'cut') this.deleteSelectedBlocks();
@@ -1683,10 +1683,10 @@ export class NotePane {
       else if (act === 'copy') this.copyBlock(index);
       else if (act === 'copy-image') this.copyImageElement(image, index);
       else if (act === 'copy-ref') {
-        const clip = window.foryou && window.foryou.clipboard;
+        const clip = window.tuyu && window.tuyu.clipboard;
         if (clip) clip.write(this.blockText(index));
       } else if (act === 'copy-code') {
-        const clip = window.foryou && window.foryou.clipboard;
+        const clip = window.tuyu && window.tuyu.clipboard;
         if (clip) clip.write(this.blockText(index));
       } else if (act === 'paste') this.pasteBlock(index);
       else if (act === 'select') this.selectBlock(index);
@@ -1727,7 +1727,7 @@ export class NotePane {
       if (act === 'type') { this.openTypeSubMenu(picked, btn); return; }
       this.closeBlockMenu();
       if (act === 'copy-text') {
-        const clip = window.foryou && window.foryou.clipboard;
+        const clip = window.tuyu && window.tuyu.clipboard;
         if (clip) clip.write(this.selectedText());
       } else if (act === 'indent') this.indentBlocks(picked, 1);
       else if (act === 'outdent') this.indentBlocks(picked, -1);
@@ -1902,13 +1902,13 @@ export class NotePane {
     const pickedCode = this.codePicked(index);
     const sel = window.getSelection();
     const picked = pickedCode || (sel && !sel.isCollapsed ? sel.toString() : '');
-    const clip = window.foryou && window.foryou.clipboard;
+    const clip = window.tuyu && window.tuyu.clipboard;
     if (clip) await clip.write(picked || this.blockText(index));
   }
 
   /** 复制图片本身到系统剪贴板；失败时退回复制 ![[文件名]] 引用 */
   async copyImageElement(img, index) {
-    const clip = window.foryou && window.foryou.clipboard;
+    const clip = window.tuyu && window.tuyu.clipboard;
     if (!clip) return false;
     let ok = false;
     try {
@@ -1931,7 +1931,7 @@ export class NotePane {
     const pickedCode = this.codePicked(index);
     const sel = window.getSelection();
     const picked = pickedCode || (sel && !sel.isCollapsed ? sel.toString() : '');
-    const clip = window.foryou && window.foryou.clipboard;
+    const clip = window.tuyu && window.tuyu.clipboard;
     if (clip) await clip.write(picked || this.blockText(index));
     const blk = this._blocks[index];
     if (blk && blk.type === 'code') {
@@ -1959,7 +1959,7 @@ export class NotePane {
   }
 
   async pasteBlock(index) {
-    const clip = window.foryou && window.foryou.clipboard;
+    const clip = window.tuyu && window.tuyu.clipboard;
     if (!clip) return;
     const text = await clip.read();
     if (!text) return;
@@ -2789,7 +2789,7 @@ export class NotePane {
 
   /** 存进库里的 image 目录，正文里只写文件名（界面上不出现任何路径） */
   async attachImage(file) {
-    const api = window.foryou && window.foryou.images;
+    const api = window.tuyu && window.tuyu.images;
     if (!api) return;
     // 没有正在编辑的块时，先落到最后编辑过的那一块
     if (this._focus == null && this._sourceIndex == null) {

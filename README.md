@@ -1,6 +1,6 @@
-# For You Notes
+# Tuyu Notes（图屿笔记）
 
-> 本地优先的双栏笔记：左边画布是知识体系图，右边是被选中笔记的内容。
+> 图屿笔记（Tuyu Notes）是本地优先的双栏笔记：左边画布是知识体系图，右边是被选中笔记的内容。
 > 全部存在本机，不联网也能用。
 
 ![总览](docs/screenshot-overview.png)
@@ -57,7 +57,9 @@ Windows 上也可以直接双击 `开启笔记.cmd`。
 
 ## 数据放在哪
 
-`%LOCALAPPDATA%\ForYouNotes\data`
+`%LOCALAPPDATA%\TuyuNotes\data`
+
+> 更名前的 `%LOCALAPPDATA%\ForYouNotes\data` 会在首次启动时自动复制到新目录，旧目录保留。
 
 | 路径 | 内容 |
 | --- | --- |

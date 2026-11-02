@@ -29,7 +29,7 @@ function createWindow(options = {}) {
     show: false,
     skipTaskbar: !show,        // 自检/截图用的隐藏窗口不进任务栏、不占屏幕
     backgroundColor: '#161616',
-    title: 'For You Notes',
+    title: 'Tuyu Notes',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,

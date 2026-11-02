@@ -32,9 +32,12 @@ function argValue(name) {
 }
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.yalen.foryounotes');
+  app.setAppUserModelId('com.yalen.tuyunotes');
 
-  const dataDir = argValue('--data-dir') || process.env.FYN_DATA_DIR || undefined;
+  const dataDir = argValue('--data-dir')
+    || process.env.TUYU_DATA_DIR
+    || process.env.FYN_DATA_DIR
+    || undefined;
   initService({
     dataDir,
     legacyDir: path.join(__dirname, 'data'),

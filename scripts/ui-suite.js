@@ -317,7 +317,7 @@
     if (iRestart < 0) fail('文件菜单里没有「重启」：' + labels.join(' / '));
     if (iQuit < 0) fail('文件菜单里没有「退出」');
     if (iRestart !== iQuit - 1) fail(`「重启」应该紧挨在「退出」上面：${labels.join(' / ')}`);
-    if (typeof window.foryou.win.relaunch !== 'function') fail('主进程没暴露 win.relaunch');
+    if (typeof window.tuyu.win.relaunch !== 'function') fail('主进程没暴露 win.relaunch');
     // 菜单里这一项必须真的指向重启，而不是别的动作
     const item = items.find((it) => it.label === '重启');
     if (item.accel) fail('「重启」不该占用快捷键：' + item.accel);
@@ -327,7 +327,7 @@
   await run('图片：存进库里，正文只留文件名', async () => {
     const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const res = await window.foryou.images.save(bytes, 'png');
+    const res = await window.tuyu.images.save(bytes, 'png');
     if (!res || !res.name) fail('保存图片失败');
     const name = res.name;
     if (!/^img-.*\.png$/.test(name)) fail('文件名不对: ' + name);
@@ -470,7 +470,7 @@
       if (!btn) fail('图片菜单里没有「复制图片」');
       realClick(btn);
       await wait(700);
-      const hasImage = await window.foryou.clipboard.hasImage();
+      const hasImage = await window.tuyu.clipboard.hasImage();
       if (!hasImage) fail('系统剪贴板里没有图片');
       if (!f.pane.blockText(0).includes(`![[${m[1]}]]`)) fail('复制图片引用兜底丢了文件名');
       return '右键图片 → 复制图片，剪贴板里有 image/png';
@@ -482,7 +482,7 @@
   });
 
   await run('清理图片：不算正在用的那张', async () => {
-    const res = await window.foryou.images.cleanup(ws.notes);
+    const res = await window.tuyu.images.cleanup(ws.notes);
     if (res.removed > 0) fail(`误删了 ${res.removed} 张正在用的图片`);
     if (res.kept < 1) fail('没有被保留的图片');
     return `保留 ${res.kept} 张，删除 ${res.removed} 张`;
@@ -716,7 +716,7 @@
     if (/Obsidian|Notion|VSCode|Electron|Chromium|Tkinter/i.test(about)) {
       fail('关于里提到了别的软件');
     }
-    if (!about.includes('For You Notes')) fail('关于里没有名字');
+    if (!about.includes('图屿笔记')) fail('关于里没有名字');
     if (!about.includes('本机') && !about.includes('不联网')) fail('关于没讲数据在本机');
     closeAll();
     await wait(120);
@@ -1898,7 +1898,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     setBlockText(ed, (ed.textContent || '') + ' ' + marker);
     await f.saveNow();
     await wait(200);
-    const loaded = await window.foryou.load();
+    const loaded = await window.tuyu.load();
     if (!loaded.notes[note.id].content.includes(marker)) fail('没有落盘');
     return '写入并读回成功';
   });
@@ -2031,7 +2031,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
   await run('接口定死会存进 app.json', async () => {
     await f.saveNow();
     await wait(200);
-    const loaded = await window.foryou.load();
+    const loaded = await window.tuyu.load();
     const g = loaded.state.graphs.find((x) => x.id === ws.graphId);
     const keys = g && g.sides ? Object.keys(g.sides) : [];
     if (!keys.length) fail('sides 没写进 app.json');
@@ -2246,7 +2246,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     if (!f.pane.note || f.pane.note.id !== first.id) fail('右栏没保留上一篇');
     await f.saveNow();
     await wait(200);
-    const loaded = await window.foryou.load();
+    const loaded = await window.tuyu.load();
     const g = loaded.state.graphs.find((x) => x.id === ws.graphId);
     if (!g) fail('找不到当前图的状态');
     if (loaded.state.selected !== null) fail('selected 应该是 null');
@@ -2510,7 +2510,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     // 落盘 + 读回
     await f.saveNow();
     await wait(200);
-    const loaded = await window.foryou.load();
+    const loaded = await window.tuyu.load();
     const saved = loaded.state.split || 0;
     if (Math.abs(saved - ws.state.split) > 0.005) fail(`比例没落盘：${saved} vs ${ws.state.split}`);
     // 用读回来的比例重算一次，应该和屏幕上的一致
@@ -2523,7 +2523,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     const st = { split: ws.state.split, zoom: ws.state.zoom, sel: ws.state.selected };
     await f.saveNow();
     await wait(150);
-    const loaded = await window.foryou.load();
+    const loaded = await window.tuyu.load();
     if (Math.abs((loaded.state.split || 0.5) - st.split) > 0.01) fail('分栏没存');
     if (Math.abs((loaded.state.zoom || 1) - st.zoom) > 0.01) fail('字号没存');
     if (loaded.state.selected !== st.sel) fail('选中项没存');

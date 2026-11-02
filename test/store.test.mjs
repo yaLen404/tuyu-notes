@@ -62,13 +62,20 @@ test('旧数据目录迁移（只复制不删）', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'fyn-legacy-'));
   const legacy = path.join(base, 'legacy');
   fs.mkdirSync(path.join(legacy, 'notes'), { recursive: true });
+  fs.mkdirSync(path.join(legacy, 'image'), { recursive: true });
+  fs.mkdirSync(path.join(legacy, 'backups'), { recursive: true });
   const { notes } = sample();
   fs.writeFileSync(path.join(legacy, 'notes', 'n1.json'), JSON.stringify(notes.n1));
+  fs.writeFileSync(path.join(legacy, 'image', 'pic.png'), 'img');
+  fs.writeFileSync(path.join(legacy, 'backups', 'backup-1.json'), '{}');
 
-  const store = new Store(path.join(base, 'new'));
+  const target = path.join(base, 'new');
+  const store = new Store(target);
   assert.equal(store.migrateLegacy(legacy), true);
   assert.ok(fs.existsSync(path.join(legacy, 'notes', 'n1.json')), '旧目录不能被删');
-  const again = new Store(path.join(base, 'new')).load();
+  assert.ok(fs.existsSync(path.join(target, 'image', 'pic.png')), '旧图片要一起搬');
+  assert.ok(fs.existsSync(path.join(target, 'backups', 'backup-1.json')), '旧备份要一起搬');
+  const again = new Store(target).load();
   assert.ok(again.notes.n1);
 });
 

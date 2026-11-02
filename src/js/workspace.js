@@ -1,5 +1,5 @@
 /** 工作区：笔记 / 图的查询与修改、撤销重做快照。
- *  所有落盘由 app.js 通过 window.foryou 完成，这里只维护内存状态。
+ *  所有落盘由 app.js 通过 window.tuyu 完成，这里只维护内存状态。
  */
 
 import { newId } from './ids.js';
