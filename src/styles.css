@@ -11,7 +11,7 @@
   --accent: #7c3aed;        /* 交互强调色 */
   --accent-soft: #a882ff;
   --caret: #c9b6ff;         /* 文本光标：亮紫，深色背景上也一眼看得见 */
-  --dot: #333333;
+  --dot: #2a2a2a;
   --hover: #363636;
   --panel: #262626;
   --radius: 8px;
@@ -49,7 +49,13 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   padding: 0 4px 0 12px;
   position: relative;
   z-index: 40;
+  /* 交给 Windows 原生窗口拖动，才能触发贴边分屏 / Aero Snap */
+  -webkit-app-region: drag;
 }
+.titlebar .menubar,
+.titlebar .winbtns,
+.titlebar button,
+.titlebar input { -webkit-app-region: no-drag; }
 .brand { display: flex; align-items: center; justify-content: center; padding: 0 12px 0 6px; }
 .brand .logo { color: var(--accent-soft); font-size: 16px; line-height: 1; }
 
@@ -89,8 +95,9 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   content: ''; position: absolute; top: 0; bottom: 0;
   left: -3px; right: -3px;
 }
-.splitter-line { width: 1px; height: 100%; background: #ffffff; opacity: .55; }
-.splitter:hover .splitter-line { opacity: 1; }
+/* 和标题栏 / 状态栏的分界线同色，不再是一条高亮白线 */
+.splitter-line { width: 1px; height: 100%; background: var(--line-soft); opacity: 1; }
+.splitter:hover .splitter-line { background: var(--line); }
 
 /* ---------------------------------------------------------------- 左栏头 */
 .pane-head {
@@ -166,7 +173,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .card.colored .card-head { background: color-mix(in srgb, var(--c) 16%, var(--card)); }
 .card.selected .card-head { border-bottom-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .card-icon { width: 11px; height: 13px; flex: 0 0 auto; opacity: .75; }
-.card-title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.card-title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-autospace: normal; }
 .card-body {
   flex: 1; min-height: 0; overflow: hidden; padding: 10px 12px;
   font-size: 14px; line-height: 1.5; color: var(--text);
@@ -281,6 +288,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .note-accent { width: 3px; height: 26px; border-radius: 2px; background: var(--line); flex: 0 0 3px; }
 .note-title {
   flex: 1; min-width: 0; font-size: 28px; font-weight: 700; letter-spacing: -.01em; color: var(--text);
+  text-autospace: normal;
 }
 .note-title::placeholder { color: var(--faint); }
 
@@ -492,6 +500,16 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   word-break: break-word;
   caret-color: var(--caret);
   border-radius: 4px;
+  /* 中文与英文 / 数字之间自动留出排版空隙（正文、标题、列表、待办、引用都用 .blk-txt） */
+  text-autospace: normal;
+}
+/* autoSpaceHtml() 加在文字之间的纯展示空隙，不进 markdown 原文 */
+.blk-txt .cjk-gap {
+  display: inline-block;
+  width: .15em;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 /* 光标落点：正在写的那一块有淡淡底色，光标闪的时候也看得出位置 */
 /* 光标所在的那一块只给一点淡淡底色（单宿主：用 .cur 代替 :focus-within） */
@@ -499,15 +517,22 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .blk:focus-within .blk-txt {
   background: rgba(255, 255, 255, .04);
 }
+/* 空块也要占一行：代码块后面的空段落如果只有 4px 高，根本点不中，
+   用户会误点进代码块，打字/回车就把代码内容改掉。 */
+.blk-empty .blk-txt { min-height: 1.55em; }
 .blk-empty.is-only .blk-txt:empty::before {
-  content: "输入 / 选择块类型，或直接开始写…";
+  content: "右键选择块类型，或直接开始写…";
   color: var(--faint);
   pointer-events: none;
 }
 /* 标题 */
-.blk-h1 .blk-txt { font-size: 1.75em; font-weight: 700; line-height: 1.25; margin: 26px 0 4px; }
-.blk-h2 .blk-txt { font-size: 1.45em; font-weight: 600; line-height: 1.3; margin: 22px 0 3px; }
-.blk-h3 .blk-txt { font-size: 1.15em; font-weight: 600; line-height: 1.4; margin: 16px 0 2px; }
+.blk-h1 .blk-txt { font-size: 1.75em; font-weight: 700; line-height: 1.25; margin: 18px 0 4px; }
+.blk-h2 .blk-txt { font-size: 1.45em; font-weight: 600; line-height: 1.3; margin: 14px 0 3px; }
+.blk-h3 .blk-txt { font-size: 1.15em; font-weight: 600; line-height: 1.4; margin: 10px 0 2px; }
+/* 笔记第一个有内容的块是标题时：前面的空块收掉，标题直接贴顶 */
+.preview > .blk-leading-empty { display: none; }
+.preview > .blk-top-heading { margin-top: -6px; padding-top: 0; }
+.preview > .blk-top-heading .blk-txt { margin-top: 0; }
 /* 列表 / 待办 / 引用：标记挂到左边的留白里，正文和段落对齐在一条线上 */
 .blk-dot, .blk-mark-num, .blk-check {
   flex: 0 0 auto;
@@ -633,11 +658,24 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 .node-toolbar .tool-btn svg { width: 13px; height: 13px; }
 
 
-/* 临时放大画布：笔记栏和分栏条先让位 */
-.body.canvas-wide .splitter,
-.body.canvas-wide .pane-right { display: none; }
-/* 左栏是按像素定宽的，宽画布时要让它自己撑满 */
-.body.canvas-wide .pane-left { flex: 1 1 auto !important; width: auto !important; }
+/* 只显示左边 / 右边 */
+.body.view-left .splitter,
+.body.view-left .pane-right { display: none; }
+.body.view-left .pane-left { flex: 1 1 auto !important; width: auto !important; }
+.body.view-right .splitter,
+.body.view-right .pane-left { display: none; }
+.body.view-right .pane-right { flex: 1 1 auto !important; width: auto !important; }
+
+/* 拖动分栏时的实时收起（VS Code 式：越过最小宽度一半就收） */
+.body.split-collapse-left .pane-left,
+.body.split-collapse-right .pane-right { display: none; }
+.body.split-collapse-left .pane-right,
+.body.split-collapse-right .pane-left { flex: 1 1 auto !important; width: auto !important; }
+.body.split-at-min .splitter,
+.body.split-collapse-left .splitter { cursor: e-resize; }
+.body.split-at-max .splitter,
+.body.split-collapse-right .splitter { cursor: w-resize; }
+.body.split-drag .splitter-line { opacity: 1; background: var(--accent-soft); }
 
 /* 右键菜单：常规文本编辑 + 「转为」子菜单 */
 .blk-menu .sep { height: 1px; background: var(--line); margin: 4px 2px; }
@@ -657,6 +695,10 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 .card.compact .card-inner {
   display: flex; flex-direction: column; justify-content: flex-start;   /* 标题贴着顶部固定距离，拉高卡片时不动 */
   border-radius: 6px;
+  background: var(--head);                                   /* 折叠后整条用"标题栏"的颜色 */
+}
+.card.colored.compact .card-inner {
+  background: color-mix(in srgb, var(--c) 16%, var(--card)); /* 有颜色的卡片用对应的标题栏色 */
 }
 .card.compact .card-head {
   height: 38px; flex: 0 0 38px;
@@ -669,6 +711,17 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 /* 卡片标题：字号与上下微调（工具条上的 A−/A＋ ↑/↓ 改的就是这两个变量） */
 .card-title { font-size: var(--t-size, 14px); }
 .card-title { transform: translateY(var(--t-off, 0px)); }   /* 图标不跟着动 */
+/* 代码块里的中文默认落在 Microsoft YaHei：13.5px 下只有 13.5px 宽，
+   不到两个 Consolas 字符（7.4375 × 2 = 14.875）。用 size-adjust 把它
+   校准成精确的两个等宽格，空格才能跨中英文对齐。 */
+@font-face {
+  font-family: "FYN Code CJK";
+  src: local("Microsoft YaHei"), local("Microsoft YaHei UI"),
+    local("PingFang SC"), local("Noto Sans CJK SC");
+  size-adjust: 110.185%;
+  unicode-range: U+2E80-9FFF, U+F900-FAFF, U+3040-30FF;
+}
+
 /* ── 代码块（Typora 式：原地编辑 + 行号 + 语言框）───────────────── */
 .blk-code { position: relative; margin: 4px 0 8px; }
 .blk-code .code-box {
@@ -678,21 +731,27 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 }
 .blk-code.cur .code-box { border-color: #3b3b3b; }
 .blk-code .code-gutter {
-  flex: 0 0 auto; min-width: 30px; padding: 10px 8px 10px 10px;
+  flex: 0 0 auto; min-width: 30px; padding: 7px 8px 7px 10px;
   text-align: right; color: #565656; background: #111;
   border-right: 1px solid #242424;
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: .9em; line-height: 1.65; tab-size: 2; -moz-tab-size: 2;
+  font-family: Consolas, "Cascadia Mono", "FYN Code CJK", "Courier New", monospace;
+  font-size: .9em; line-height: 1.4; tab-size: 2; -moz-tab-size: 2;
   user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums;
 }
 .blk-code .code-main { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .blk-code .code-hl, .blk-code .code-input {
   margin: 0; border: 0; border-radius: 0; background: transparent;
   box-sizing: border-box;
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: .9em; line-height: 1.65; letter-spacing: 0;
+  font-family: Consolas, "Cascadia Mono", "FYN Code CJK", "Courier New", monospace;
+  font-size: .9em; line-height: 1.4; letter-spacing: 0;
   tab-size: 2; -moz-tab-size: 2; white-space: pre; word-break: normal;
-  overflow-wrap: normal; padding: 10px 12px;
+  overflow-wrap: normal; padding: 7px 12px;
+  /* 严格等宽：空格 / 字母 / 数字同一字宽，禁止连字和字距调整 */
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-kerning: none;
+  font-variant-numeric: tabular-nums;
+  text-autospace: no-autospace;
 }
 .blk-code .code-hl {
   position: absolute; top: 0; left: 0; width: max-content; min-width: 100%; height: 100%;
@@ -702,7 +761,7 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 .blk-code .code-hl code { background: none; padding: 0; font: inherit; color: inherit; }
 .blk-code .code-input {
   position: relative; z-index: 1; display: block; width: 100%;
-  height: 44px; min-height: 44px; resize: none;
+  height: 36px; min-height: 36px; resize: none;
   overflow-x: auto; overflow-y: hidden; outline: none;
   color: transparent; -webkit-text-fill-color: transparent;
   caret-color: var(--caret); user-select: text;
@@ -711,12 +770,22 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 /* 输入法组合期间：把输入框里的候选字显示出来，高亮层先让开 */
 .blk-code.composing .code-hl { visibility: hidden; }
 .blk-code.composing .code-input { color: var(--text); -webkit-text-fill-color: currentColor; }
-.blk-code .code-foot { display: flex; justify-content: flex-end; margin-top: 2px; }
+.blk-code .code-foot {
+  position: absolute; right: 5px; bottom: 3px; z-index: 3;
+  display: flex; justify-content: flex-end; margin: 0; padding: 2px;
+  opacity: 1; pointer-events: auto;
+  transition: opacity .12s ease;
+}
+/* 编辑代码时语言标注让位，和最后一行共用位置；
+   鼠标靠近右下角（.lang-near）或语言框自己获得焦点时再出现。 */
+.blk-code.cur .code-foot { opacity: 0; pointer-events: none; }
+.blk-code.cur.lang-near .code-foot,
+.blk-code.cur .code-foot:focus-within { opacity: 1; pointer-events: auto; }
 .blk-code .code-lang {
-  width: 112px; height: 22px; padding: 0 6px; text-align: center;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
-  color: var(--muted); outline: none;
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  width: 120px; height: 22px; padding: 0 8px; text-align: center;
+  background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px;
+  color: #8d8d8d; outline: none;
+  font-family: Consolas, "Cascadia Mono", "FYN Code CJK", "Courier New", monospace;
   font-size: 11.5px;
 }
 .blk-code .code-lang:hover { color: var(--text); border-color: #3b3b3b; }
@@ -743,3 +812,17 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 .tok-meta { color: #c586c0; }
 .tok-add { color: #6a9955; }
 .tok-del { color: #f48771; }
+
+/* 选中连线后两端的小圆点：可以拖着换落点 */
+.edges circle.port { pointer-events: auto; cursor: crosshair; }
+
+/* 拖连线时只显示离鼠标最近的那一个落点（与普通悬停一致） */
+
+
+/* 折叠卡：圆角跟随卡片本身（原来 6px 比 8px 的卡片小，四角会有细缝） */
+.card.compact .card-inner { border-radius: inherit; }
+.card.compact .card-head { border-radius: 0; }
+
+/* 左下角工具栏里的图标按钮（三横线） */
+.pill-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.pill-btn.active { color: var(--accent); }

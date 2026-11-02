@@ -86,10 +86,13 @@
     return `${left}/${body} = ${(left / body).toFixed(3)}`;
   });
 
-  await run('分隔条是 1px 白线', async () => {
+  await run('分隔条和其他分界线同色', async () => {
     const st = getComputedStyle($('.splitter-line'));
-    if (st.width !== '1px' || st.backgroundColor !== 'rgb(255, 255, 255)') fail(`${st.width} ${st.backgroundColor}`);
-    return '白色 1px';
+    const chrome = getComputedStyle(document.querySelector('.titlebar')).borderBottomColor;
+    if (st.width !== '1px' || st.backgroundColor !== chrome) {
+      fail(`${st.width} ${st.backgroundColor} vs ${chrome}`);
+    }
+    return `1px ${st.backgroundColor}`;
   });
 
   await run('单击卡片：选中但不夺走笔记焦点', async () => {
@@ -374,6 +377,108 @@
     if (!after.includes('![[img-')) fail('粘贴没有插入图片');
     if (after.includes('image/')) fail('正文里出现了路径');
     return '剪贴板图片已落到库里的 image 目录';
+  });
+
+  await run('图片块可以退格删掉（纯图片 / 图文混排）', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    const press = (el, key) => el.dispatchEvent(new KeyboardEvent('keydown', {
+      key, bubbles: true, cancelable: true,
+    }));
+    f.selectNote(note.id);
+    await wait(180);
+    try {
+      // 只有一张图
+      note.content = '![[img-del-test.png]]';
+      f.pane.renderBlocks();
+      await wait(180);
+      f.pane.focusBlock(0, 'end');
+      await wait(100);
+      let txt = document.querySelector('#preview .blk-txt');
+      press(txt, 'Backspace');
+      await wait(220);
+      if (document.querySelector('#preview img.note-img')) fail('纯图片块退格后图片还在');
+      if (ws.note(note.id).content.includes('img-del-test')) fail('纯图片块退格后内容里还有图片引用');
+
+      // 图文混排：点图片 → 光标在图片后 → 退格
+      note.content = '前文 ![[img-inline-test.png]] 后文';
+      f.pane.renderBlocks();
+      await wait(180);
+      const img = document.querySelector('#preview img.note-img');
+      if (!img) fail('图文块里的图片没渲染');
+      const r = img.getBoundingClientRect();
+      img.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2),
+      }));
+      await wait(100);
+      txt = document.querySelector('#preview .blk-txt');
+      press(txt, 'Backspace');
+      await wait(220);
+      if (document.querySelector('#preview img.note-img')) fail('图文块退格后图片还在');
+      const content = ws.note(note.id).content;
+      if (!content.includes('前文') || !content.includes('后文')) fail('删图片把前后文字弄丢了');
+      if (content.includes('img-inline-test')) fail('图文块退格后内容里还有图片引用');
+
+      // 整段选中再删：不能只删文字、把图片留下
+      note.content = '前文 ![[img-select-test.png]] 后文';
+      f.pane.renderBlocks();
+      await wait(160);
+      txt = document.querySelector('#preview .blk-txt');
+      const range = document.createRange();
+      range.selectNodeContents(txt);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      press(txt, 'Delete');
+      await wait(220);
+      if (document.querySelector('#preview img.note-img')) fail('整段删除后图片还在');
+      if (ws.note(note.id).content.includes('img-select-test')) fail('整段删除后内容里还有图片引用');
+      return '纯图片 / 图文混排 / 整段选中 都能删掉图片';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+  });
+
+  await run('右键图片：复制图片写入系统剪贴板', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(180);
+    try {
+      const m = String(original).match(/!\[\[(img-[^\]]+\.(?:png|jpe?g|gif|webp|bmp|svg|avif))\]\]/i);
+      if (!m) fail('前面没有可用的图片引用');
+      note.content = `![[${m[1]}]]`;
+      f.pane.renderBlocks();
+      await wait(260);
+      const img = document.querySelector('#preview img.note-img');
+      if (!img) fail('图片没渲染出来');
+      img.style.width = '48px';
+      img.style.height = '48px';
+      await wait(80);
+      const r = img.getBoundingClientRect();
+      img.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2),
+      }));
+      await wait(240);
+      const menu = document.querySelector('.blk-menu');
+      if (!menu) fail('右键图片没有菜单');
+      const btn = [...menu.querySelectorAll('button')].find((b) => b.dataset.act === 'copy-image');
+      if (!btn) fail('图片菜单里没有「复制图片」');
+      realClick(btn);
+      await wait(700);
+      const hasImage = await window.foryou.clipboard.hasImage();
+      if (!hasImage) fail('系统剪贴板里没有图片');
+      if (!f.pane.blockText(0).includes(`![[${m[1]}]]`)) fail('复制图片引用兜底丢了文件名');
+      return '右键图片 → 复制图片，剪贴板里有 image/png';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
   });
 
   await run('清理图片：不算正在用的那张', async () => {
@@ -906,6 +1011,158 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '选中 3 块 → 删除，' + before + ' → ' + f.pane._blocks.length;
   });
 
+  await run('多选块可以批量改类型 / 缩进 / 勾选', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    const menuOn = (i) => {
+      const blk = document.querySelector('#preview .blk[data-i="' + i + '"]');
+      const r = blk.getBoundingClientRect();
+      blk.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + 12), clientY: Math.round(r.top + 8),
+      }));
+    };
+    const chooseType = async (label) => {
+      const typeBtn = [...document.querySelectorAll('.blk-menu:not(.sub) button')]
+        .find((b) => b.dataset.act === 'type');
+      if (!typeBtn) fail('多选菜单里没有「转为」');
+      typeBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      await wait(140);
+      const sub = document.querySelector('.blk-menu.sub');
+      if (!sub) fail('没有弹出「转为」子菜单');
+      const target = [...sub.querySelectorAll('button')].find((b) => b.textContent === label);
+      if (!target) fail('子菜单里没有「' + label + '」');
+      realClick(target);
+      await wait(260);
+    };
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '甲段\n\n乙段\n\n丙段\n\n丁段';
+      f.pane.renderBlocks();
+      await wait(120);
+      f.pane._sel = new Set([0, 1, 2]);
+      f.pane.repaintSelection();
+
+      menuOn(1);
+      await wait(200);
+      const menu = document.querySelector('.blk-menu');
+      if (!menu) fail('多选右键没有菜单');
+      if (![...menu.querySelectorAll('button')].some((b) => b.dataset.act === 'type')) {
+        fail('多选菜单里没有批量「转为」');
+      }
+      await chooseType('标题 2');
+      if (f.pane._blocks[0].type !== 'h2' || f.pane._blocks[1].type !== 'h2' || f.pane._blocks[2].type !== 'h2') {
+        fail('批量改类型没作用到全部：' + f.pane._blocks.map((b) => b.type).join(','));
+      }
+      if (f.pane._blocks[3].type !== 'p') fail('没选中的块被改了');
+      if (!ws.note(note.id).content.includes('## 甲段') || !ws.note(note.id).content.includes('## 丙段')) {
+        fail('批量改类型后文字丢了');
+      }
+      if (f.pane._sel.size !== 3) fail('批量改完选中丢了：' + f.pane._sel.size);
+
+      // 批量变成待办
+      f.pane._sel = new Set([0, 1, 2]);
+      f.pane.repaintSelection();
+      menuOn(0);
+      await wait(180);
+      await chooseType('待办');
+      if (!f.pane._blocks.slice(0, 3).every((b) => b.type === 'task')) fail('批量转待办没生效');
+
+      // 多选后一键全部勾选
+      f.pane._sel = new Set([0, 1, 2]);
+      f.pane.repaintSelection();
+      menuOn(0);
+      await wait(180);
+      const check = [...document.querySelectorAll('.blk-menu button')].find((b) => b.dataset.act === 'check');
+      if (!check) fail('多选待办菜单里没有「全部勾选」');
+      realClick(check);
+      await wait(240);
+      if (!f.pane._blocks.slice(0, 3).every((b) => b.type === 'task' && b.done)) fail('全部勾选没生效');
+
+      // 批量转成列表后缩进
+      f.pane._sel = new Set([0, 1, 2]);
+      f.pane.repaintSelection();
+      menuOn(0);
+      await wait(180);
+      await chooseType('无序列表');
+      f.pane._sel = new Set([0, 1, 2]);
+      f.pane.repaintSelection();
+      menuOn(0);
+      await wait(180);
+      const indent = [...document.querySelectorAll('.blk-menu button')].find((b) => b.dataset.act === 'indent');
+      if (!indent) fail('列表多选菜单里没有「缩进一级」');
+      realClick(indent);
+      await wait(240);
+      if (!f.pane._blocks.slice(0, 3).every((b) => b.type === 'bullet' && b.depth === 1)) {
+        fail('批量缩进没生效：' + f.pane._blocks.slice(0, 3).map((b) => b.depth).join(','));
+      }
+      return '批量改类型 / 全部勾选 / 批量缩进 都正常';
+    } finally {
+      f.pane._sel.clear();
+      if (f.pane.closeBlockMenu) f.pane.closeBlockMenu();
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
+  });
+
+  await run('拖选多行文字后右键，可以批量转块类型', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '甲段\n\n乙段\n\n丙段\n\n丁段';
+      f.pane.renderBlocks();
+      await wait(180);
+      const txts = [...document.querySelectorAll('#preview .blk-txt')];
+      if (txts.length < 4) fail('块不够');
+      const range = document.createRange();
+      range.setStart(txts[0].firstChild, 0);
+      range.setEnd(txts[2].firstChild, 2);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      await wait(80);
+      const picked = f.pane.selectionBlockIndexes();
+      if (picked.join(',') !== '0,1,2') fail('跨块选区识别的块不对：' + picked.join(','));
+
+      const blk = document.querySelector('#preview .blk[data-i="1"]');
+      const r = blk.getBoundingClientRect();
+      blk.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + 12), clientY: Math.round(r.top + 8),
+      }));
+      await wait(200);
+      const menu = document.querySelector('.blk-menu');
+      if (!menu) fail('跨块选区右键没有菜单');
+      if (![...menu.querySelectorAll('button')].some((b) => b.dataset.act === 'copy-text')) {
+        fail('跨块选区菜单里没有「复制所选文字」');
+      }
+      const typeBtn = menu.querySelector('[data-act="type"]');
+      if (!typeBtn || !typeBtn.textContent.includes('3')) fail('跨块选区菜单里没有批量「转为」');
+      typeBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      await wait(140);
+      const sub = document.querySelector('.blk-menu.sub');
+      if (!sub) fail('跨块选区没有「转为」子菜单');
+      const h2 = [...sub.querySelectorAll('button')].find((b) => b.dataset.type === 'h2');
+      if (!h2) fail('子菜单没有标题 2');
+      realClick(h2);
+      await wait(300);
+      if (!f.pane._blocks.slice(0, 3).every((b) => b.type === 'h2')) fail('批量转标题没作用到 3 块');
+      if (f.pane._blocks[3].type !== 'p') fail('没选中的块被改了');
+      const content = ws.note(note.id).content;
+      if (!content.includes('## 甲段') || !content.includes('## 丙段')) fail('批量转标题后文字丢了');
+      return '拖选 3 块文字 → 批量转标题 2';
+    } finally {
+      if (f.pane.closeBlockMenu) f.pane.closeBlockMenu();
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
+  });
+
   await run('单宿主：文字选区可以跨块（原生选区）', async () => {
     const note = ws.notesOf().find((n) => (n.content || '').split('\n\n').length >= 4);
     f.selectNote(note.id);
@@ -931,30 +1188,72 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '跨 3 块选区，文字 ' + picked.length + ' 字（含换行）';
   });
 
-  await run('点正文空白处，光标落到最后一块', async () => {
-    const note = ws.notesOf().find((n) => (n.content || '').length > 20);
+  await run('点块左侧留白，光标落到对应行而不是最后一块', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
     f.selectNote(note.id);
-    await wait(300);
-    const prev = document.getElementById('preview');
-    const r = prev.getBoundingClientRect();
-    const lastIndex = f.pane._blocks.length - 1;
-    const x = Math.round(r.left + r.width / 2);
-    const y = Math.round(r.bottom - 8);
-    const target = document.elementFromPoint(x, y) || prev;
-    pointer(target, 'pointerdown', x, y);
-    pointer(window, 'pointerup', x, y);
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
-    await wait(340);
-    if (f.pane._focus !== lastIndex) fail('没落到最后一块：' + f.pane._focus + ' / 最后 ' + lastIndex);
-    // 单宿主：焦点在 #preview，光标位置看选区
-    const sel = window.getSelection();
-    const node = sel && sel.anchorNode;
-    const el = node ? (node.nodeType === 1 ? node : node.parentElement) : null;
-    const blk = el && el.closest ? el.closest('.blk') : null;
-    if (!blk || Number(blk.dataset.i) !== lastIndex) {
-      fail('光标不在最后一块里');
+    await wait(200);
+    try {
+      note.content = '# 标题\n\n正文\n\n尾部';
+      f.pane.renderBlocks();
+      await wait(180);
+      const heading = document.querySelector('#preview .blk-h1');
+      const r = heading.getBoundingClientRect();
+      const preview = document.getElementById('preview');
+      const x = Math.round(r.left - 10);
+      const y = Math.round(r.top + r.height / 2);
+      preview.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true, clientX: x, clientY: y,
+      }));
+      await wait(300);
+      if (f.pane._focus !== 0) fail('左侧留白点击没有落到标题块：' + f.pane._focus);
+      const sel = window.getSelection();
+      const el = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
+      const blk = el && el.closest ? el.closest('.blk') : null;
+      if (!blk || Number(blk.dataset.i) !== 0) fail('光标没有停在点击的那一行');
+      return '左侧留白点击 → 光标停在对应块，不跳到末尾';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
     }
-    return '空白处点击 → 最后一块（第 ' + (lastIndex + 1) + ' 块）';
+  });
+
+  await run('点最后一块下方空白，自动新开一块并跳转', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(220);
+    try {
+      note.content = '第一段\n\n第二段';
+      f.pane.renderBlocks();
+      await wait(200);
+      const before = f.pane._blocks.length;
+      const prev = document.getElementById('preview');
+      const r = prev.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2);
+      const y = Math.round(r.bottom - 8);
+      const target = document.elementFromPoint(x, y) || prev;
+      pointer(target, 'pointerdown', x, y);
+      pointer(window, 'pointerup', x, y);
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+      await wait(340);
+      if (f.pane._blocks.length !== before + 1) fail('没有新开一块：' + before + ' → ' + f.pane._blocks.length);
+      const lastIndex = f.pane._blocks.length - 1;
+      if (f.pane._blocks[lastIndex].type !== 'empty') fail('新开的不是空段落');
+      if (f.pane._focus !== lastIndex) fail('没有跳到新块：' + f.pane._focus + ' / ' + lastIndex);
+      // 单宿主：焦点在 #preview，光标位置看选区
+      const sel = window.getSelection();
+      const node = sel && sel.anchorNode;
+      const el = node ? (node.nodeType === 1 ? node : node.parentElement) : null;
+      const blk = el && el.closest ? el.closest('.blk') : null;
+      if (!blk || Number(blk.dataset.i) !== lastIndex) fail('光标不在新块里');
+      return '最后一块下方点击 → 新开第 ' + (lastIndex + 1) + ' 块并聚焦';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
   });
 
   await run('画布按钮：临时让画布占满，再点还原', async () => {
@@ -974,6 +1273,138 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     if (getComputedStyle(right).display === 'none') fail('再点没有还原笔记栏');
     if (Math.abs(Math.round(canvas.getBoundingClientRect().width) - before) > 4) fail('画布宽度没还原');
     return '画布 ' + before + ' → ' + wide + ' → ' + Math.round(canvas.getBoundingClientRect().width);
+  });
+
+  await run('窗口半屏自动只看右边，离开半屏恢复分栏', async () => {
+    const body = document.getElementById('body');
+    const left = document.getElementById('leftPane');
+    const right = document.getElementById('rightPane');
+    const saved = ws.state.viewMode;
+    f.applyWindowFit({ half: true, full: false });
+    await wait(260);
+    if (!body.classList.contains('view-right')) fail('半屏没有切到只看右边');
+    if (getComputedStyle(left).display !== 'none') fail('半屏时画布还在');
+    if (ws.state.viewMode !== saved) fail('自动半屏把 viewMode 持久化改了');
+
+    f.applyWindowFit({ half: false, full: true });
+    await wait(260);
+    if (body.classList.contains('view-right') || body.classList.contains('view-left')) {
+      fail('全屏没有恢复左右分栏');
+    }
+    if (getComputedStyle(left).display === 'none' || getComputedStyle(right).display === 'none') {
+      fail('全屏后还有一栏隐藏');
+    }
+    f.applyWindowFit({ half: false, full: false });
+    await wait(220);
+    return '半屏 → 只看右边；全屏 / 普通窗口 → 双栏';
+  });
+
+  await run('标题栏走原生拖动区域，支持 Windows 贴边分屏', async () => {
+    const titlebar = document.querySelector('.titlebar');
+    if (!titlebar) fail('没有标题栏');
+    const region = getComputedStyle(titlebar).getPropertyValue('-webkit-app-region');
+    if (region !== 'drag') fail('标题栏不是原生拖动区域：' + region);
+    const close = document.getElementById('btnClose');
+    if (getComputedStyle(close).getPropertyValue('-webkit-app-region') !== 'no-drag') {
+      fail('窗口按钮没有排除在拖动区域外');
+    }
+    const menu = document.querySelector('.menubar');
+    if (getComputedStyle(menu).getPropertyValue('-webkit-app-region') !== 'no-drag') {
+      fail('菜单没有排除在拖动区域外');
+    }
+    return '标题栏 drag / 按钮和菜单 no-drag';
+  });
+
+  await run('视图：只看左边 / 只看右边 / 恢复分栏', async () => {
+    const body = document.getElementById('body');
+    const left = document.getElementById('leftPane');
+    const right = document.getElementById('rightPane');
+    const splitter = document.getElementById('splitter');
+    const leftW = Math.round(left.getBoundingClientRect().width);
+    const rightW = Math.round(right.getBoundingClientRect().width);
+
+    f.menuAction('view', 0).action();
+    await wait(420);
+    if (getComputedStyle(right).display !== 'none') {
+      fail('只看左边时笔记栏没隐藏：' + body.className + ' / ' + ws.state.viewMode + ' / ' + getComputedStyle(right).display);
+    }
+    if (getComputedStyle(splitter).display !== 'none') fail('只看左边时分栏条没隐藏');
+    if (Math.abs(Math.round(left.getBoundingClientRect().width) - body.clientWidth) > 4) {
+      fail('只看左边时画布没占满');
+    }
+    if (ws.state.viewMode !== 'left') fail('viewMode 没记成 left');
+
+    f.menuAction('view', 1).action();
+    await wait(420);
+    if (getComputedStyle(left).display !== 'none') fail('只看右边时画布没隐藏');
+    if (Math.abs(Math.round(right.getBoundingClientRect().width) - body.clientWidth) > 4) {
+      fail('只看右边时笔记栏没占满');
+    }
+    if (ws.state.viewMode !== 'right') fail('viewMode 没记成 right');
+
+    f.menuAction('view', 2).action();
+    await wait(420);
+    if (getComputedStyle(left).display === 'none' || getComputedStyle(right).display === 'none') {
+      fail('恢复分栏后有一边还是隐藏的');
+    }
+    if (Math.abs(Math.round(left.getBoundingClientRect().width) - leftW) > 5
+      || Math.abs(Math.round(right.getBoundingClientRect().width) - rightW) > 5) {
+      fail('恢复分栏后宽度没回来');
+    }
+    if (ws.state.viewMode !== 'both') fail('viewMode 没记成 both');
+    return `分栏 ${leftW}+${rightW} → 左 ${body.clientWidth} / 右 ${body.clientWidth} → 还原`;
+  });
+
+  await run('分栏拖到左右边缘自动切单栏', async () => {
+    const body = document.getElementById('body');
+    const left = document.getElementById('leftPane');
+    const right = document.getElementById('rightPane');
+    const splitter = document.getElementById('splitter');
+    const dragTo = async (x, expectClass) => {
+      const r = splitter.getBoundingClientRect();
+      const sx = Math.round(r.left + 3);
+      const sy = Math.round(r.top + 40);
+      splitter.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, clientX: sx, clientY: sy, pointerId: 3, button: 0,
+      }));
+      splitter.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true, clientX: x, clientY: sy, pointerId: 3,
+      }));
+      await wait(80);
+      if (expectClass && !body.classList.contains(expectClass)) {
+        fail('拖动过程中没有实时进入 ' + expectClass);
+      }
+      splitter.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true, clientX: x, clientY: sy, pointerId: 3,
+      }));
+      await wait(420);
+    };
+    f.menuAction('view', 2).action();
+    await wait(320);
+    // 100px 处还不够靠近左边缘，不应该提前收起
+    await dragTo(100);
+    if (ws.state.viewMode !== 'both') fail('100px 处就提前切了单栏');
+    if (getComputedStyle(left).display === 'none') fail('100px 处画布已经被收起了');
+
+    f.menuAction('view', 2).action();
+    await wait(320);
+    await dragTo(0, 'split-collapse-left');
+    if (ws.state.viewMode !== 'right') fail('拖到最左没有切到只看右边：' + ws.state.viewMode);
+    if (getComputedStyle(left).display !== 'none') fail('拖到最左后画布还在');
+
+    f.menuAction('view', 2).action();
+    await wait(320);
+    await dragTo(body.clientWidth - 1, 'split-collapse-right');
+    if (ws.state.viewMode !== 'left') fail('拖到最右没有切到只看左边：' + ws.state.viewMode);
+    if (getComputedStyle(right).display !== 'none') fail('拖到最右后笔记栏还在');
+
+    f.menuAction('view', 2).action();
+    await wait(320);
+    // 双击分栏条 → 恢复均分
+    splitter.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+    await wait(320);
+    if (Math.abs((ws.state.split || 0) - 0.5) > 0.02) fail('双击没有恢复均分：' + ws.state.split);
+    return '拖动时实时收起；拖到左 / 右 → 单栏；双击恢复均分';
   });
 
   await run('画布缩放条能用（走真实指针路径）', async () => {
@@ -1100,6 +1531,42 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '撤销 / 重做都作用在笔记内容上';
   });
 
+  await run('改完标题后，代码块 Ctrl+Z 仍是撤代码而不是标题', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    const originalTitle = note.title;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '```js\nconst a = 1;\n```';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.hooks.onRename(note.id, originalTitle + 'X');
+      await wait(260);
+      f.pane.focusCode(0, 'end');
+      await wait(120);
+      const ta = document.querySelector('#preview .code-input');
+      if (!ta) fail('没有代码输入框');
+      ta.value = 'const a = 2;';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(220);
+      if (!ws.note(note.id).content.includes('const a = 2;')) fail('代码输入没写回');
+      ta.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
+      }));
+      await wait(300);
+      if (ws.note(note.id).content.includes('const a = 2;')) fail('Ctrl+Z 没有撤掉代码输入');
+      if (!ws.note(note.id).content.includes('const a = 1;')) fail('撤销后代码不是上一版');
+      if (ws.note(note.id).title !== originalTitle + 'X') fail('Ctrl+Z 把标题也撤了');
+      return '代码 Ctrl+Z 只撤代码，标题保持不变';
+    } finally {
+      f.pane.hooks.onRename(note.id, originalTitle);
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+  });
+
   await run('文本光标在深色背景上看得见', async () => {
     const note = ws.notesOf().find((n) => (n.content || '').length > 20);
     f.selectNote(note.id);
@@ -1119,6 +1586,173 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     const bg = getComputedStyle(txt).backgroundColor;
     if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') fail('聚焦的块没有落点底色');
     return `光标 ${caret}（亮度 ${Math.round(lum)}）`;
+  });
+
+  await run('焦点离开笔记后不保留块编辑底色', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(220);
+    f.pane.focusBlock(0, 'end');
+    await wait(160);
+    if (!document.querySelector('#preview .blk.cur')) fail('聚焦块后没有编辑底色');
+
+    window.dispatchEvent(new Event('blur'));
+    await wait(120);
+    if (document.querySelector('#preview .blk.cur')) fail('窗口失焦后块还亮着');
+
+    f.pane.focusBlock(0, 'end');
+    await wait(160);
+    if (!document.querySelector('#preview .blk.cur')) fail('重新聚焦块后没有底色');
+    const title = document.getElementById('noteTitle');
+    title.focus();
+    await wait(140);
+    if (document.querySelector('#preview .blk.cur')) fail('焦点到标题后块还亮着');
+    return '窗口失焦 / 点标题都会收掉编辑底色';
+  });
+
+  await run('真实输入：input 落在 #preview 也能写回', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '原始文字';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.focusBlock(0, 'end');
+      await wait(100);
+      const txt = document.querySelector('#preview .blk-txt');
+      const preview = document.getElementById('preview');
+      if (!txt) fail('没有可编辑块');
+      txt.innerHTML = '原始文字X';
+      preview.dispatchEvent(new InputEvent('input', {
+        bubbles: true, inputType: 'insertText', data: 'X',
+      }));
+      await wait(240);
+      if (!ws.note(note.id).content.includes('原始文字X')) {
+        fail('input 落在 #preview 时没有写回：' + ws.note(note.id).content.slice(0, 40));
+      }
+      return '#preview 上的真实 input 已写回 note.content';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+  });
+
+  await run('标题块上方空隙收紧，开头标题不顶空白', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '# 开头标题\n\n正文\n\n## 中间标题';
+      f.pane.renderBlocks();
+      await wait(180);
+      const h1 = document.querySelector('#preview .blk-h1 .blk-txt');
+      const h2 = document.querySelector('#preview .blk-h2 .blk-txt');
+      if (!h1 || !h2) fail('标题块没渲染');
+      if (getComputedStyle(h1).marginTop !== '0px') {
+        fail('开头标题还有空隙：' + getComputedStyle(h1).marginTop);
+      }
+      const h1Blk = h1.closest('.blk');
+      if (getComputedStyle(h1Blk).paddingTop !== '0px') fail('开头标题块还有顶部内边距');
+      const preview = document.getElementById('preview');
+      const gap = Math.round(h1.getBoundingClientRect().top - preview.getBoundingClientRect().top);
+      if (gap > 1) fail('开头标题离顶部还有 ' + gap + 'px');
+      if (getComputedStyle(h2).marginTop !== '14px') {
+        fail('中间标题空隙不对：' + getComputedStyle(h2).marginTop);
+      }
+
+      // 笔记开头有空的 ### 块时，真正第一个有内容的标题也必须贴顶
+      note.content = '### \n\n### 1.bank 标题';
+      f.pane.renderBlocks();
+      await wait(180);
+      const leading = document.querySelector('#preview > .blk-leading-empty');
+      const topHeading = document.querySelector('#preview > .blk-top-heading');
+      if (!leading || getComputedStyle(leading).display !== 'none') {
+        fail('开头空标题块没有收掉');
+      }
+      if (!topHeading || !topHeading.textContent.includes('1.bank')) {
+        fail('第一个有内容的标题没有被标记');
+      }
+      const topTxt = topHeading.querySelector('.blk-txt');
+      const topGap = Math.round(topTxt.getBoundingClientRect().top
+        - document.getElementById('preview').getBoundingClientRect().top);
+      if (topGap > 1) fail('有前置空块时标题上方还有 ' + topGap + 'px');
+      return '开头空块收掉，第一个有内容的标题贴顶；中间 h2 14px';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
+  });
+
+  await run('中文与英文 / 数字之间自动留半角空隙', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '中文English中文123';
+      f.pane.renderBlocks();
+      await wait(180);
+      const txt = document.querySelector('#preview .blk-txt');
+      if (!txt) fail('没有正文块');
+      if (getComputedStyle(txt).getPropertyValue('text-autospace') !== 'normal') {
+        fail('正文没有启用 text-autospace');
+      }
+      const gaps = txt.querySelectorAll('.cjk-gap');
+      if (gaps.length !== 3) fail('展示空隙数量不对：' + gaps.length);
+      if (note.content !== '中文English中文123') fail('展示空隙写进了正文内容');
+      const range = document.createRange();
+      range.selectNodeContents(txt);
+      for (const gap of gaps) gap.style.display = 'none';
+      txt.style.textAutospace = 'no-autospace';
+      await wait(60);
+      const without = range.getBoundingClientRect().width;
+      txt.style.textAutospace = 'normal';
+      await wait(60);
+      const oldSpace = range.getBoundingClientRect().width;
+      for (const gap of gaps) gap.style.display = '';
+      await wait(60);
+      const withSpace = range.getBoundingClientRect().width;
+      if (!(withSpace > oldSpace + .5)) {
+        fail(`空隙没有比原来更宽：${oldSpace} → ${withSpace}`);
+      }
+      if (!(withSpace > without + 1)) {
+        fail(`中英混排没有变宽：${without} → ${withSpace}`);
+      }
+      f.pane.focusBlock(0, 'end');
+      await wait(100);
+      document.execCommand('insertText', false, 'X');
+      await wait(220);
+      if (!ws.note(note.id).content.includes('中文English中文123X')) {
+        fail('空隙节点挡住了正常输入：' + ws.note(note.id).content);
+      }
+      if (ws.note(note.id).content.includes('cjk-gap')) fail('空隙节点被写进了正文');
+
+      const title = document.getElementById('noteTitle');
+      if (!title || getComputedStyle(title).getPropertyValue('text-autospace') !== 'normal') {
+        fail('笔记标题没有启用自动空隙');
+      }
+      const cardTitle = document.querySelector('.card-title');
+      if (cardTitle && getComputedStyle(cardTitle).getPropertyValue('text-autospace') !== 'normal') {
+        fail('画布卡片标题没有启用自动空隙');
+      }
+
+      note.content = '# 中文English中文123';
+      f.pane.renderBlocks();
+      await wait(160);
+      const h1 = document.querySelector('#preview .blk-h1 .blk-txt');
+      if (!h1) fail('没有标题块');
+      if (h1.querySelectorAll('.cjk-gap').length !== 3) fail('标题块没有自动空隙');
+      return `中英混排宽度 ${without.toFixed(1)} → ${withSpace.toFixed(1)}px，正文 / 标题 / 卡片标题都生效`;
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
   });
 
   await run('输入即转换 / Tab 缩进 / 上下键跨块 / 多行粘贴拆块', async () => {
@@ -1213,7 +1847,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     const menu = document.querySelector('.blk-menu');
     if (!menu) fail('右键没有弹出菜单');
     const acts = [...menu.querySelectorAll('button')].map((b) => b.dataset.act).filter(Boolean);
-    for (const a of ['cut', 'copy', 'paste', 'select', 'type']) {
+    for (const a of ['cut', 'copy', 'paste', 'select', 'type', 'del']) {
       if (!acts.includes(a)) fail('右键菜单缺少 ' + a);
     }
 
@@ -1894,6 +2528,454 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     if (Math.abs((loaded.state.zoom || 1) - st.zoom) > 0.01) fail('字号没存');
     if (loaded.state.selected !== st.sel) fail('选中项没存');
     return '分栏 / 字号 / 选中项都在';
+  });
+
+  // ---------------------------------------------------------------- 代码块（Typora 式）
+  const keyOn = (el, key, extra = {}) => el.dispatchEvent(new KeyboardEvent('keydown', Object.assign({
+    key, bubbles: true, cancelable: true,
+  }, extra)));
+  const codeBlockOf = () => document.querySelector('#preview .blk-code');
+  const codeInputOf = (i = 0) => {
+    const blk = document.querySelectorAll('#preview .blk-code')[i];
+    return blk ? blk.querySelector('.code-input') : null;
+  };
+  const setCodeContent = async (md) => {
+    ws.note(ws.state.selected).content = md;
+    f.pane.renderBlocks();
+    await wait(140);
+  };
+  const restoreNoteContent = async (note, content) => {
+    f.selectNote(note.id);
+    await wait(160);
+    note.content = content;
+    f.pane.renderBlocks();
+    await wait(140);
+  };
+
+  await run('代码块：原地编辑、行号、语言框、实时写回', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(220);
+    await setCodeContent('# 代码\n\n```js\nconst a = 1;\nconsole.log(a);\n```\n\n尾部');
+    const blk = codeBlockOf();
+    if (!blk) fail('没有渲染出代码块');
+    const ta = blk.querySelector('.code-input');
+    const lang = blk.querySelector('.code-lang');
+    if (!ta) fail('代码块没有输入框（还是点开才编辑）');
+    if (blk.querySelector('.blk-editor')) fail('代码块还是 textarea 源码模式');
+    if (blk.classList.contains('is-editing')) fail('代码块进入了 is-editing 模式');
+    if (ta.value !== 'const a = 1;\nconsole.log(a);') fail('输入框文本不对：' + ta.value);
+    if (blk.querySelectorAll('.code-gutter div').length !== 2) fail('行号数量不对');
+    if (lang.value !== 'js') fail('语言框没显示 js：' + lang.value);
+    if (!/tok-kw/.test(blk.querySelector('.code-hl').innerHTML)) fail('没有语法着色');
+
+    // 输入：DOM 不重建，note.content 立刻更新
+    const same = blk;
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.value = 'const a = 2;\nconsole.log(a);';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(120);
+    if (same !== codeBlockOf()) fail('打字把整块重排了');
+    if (!ws.note(note.id).content.includes('const a = 2;')) fail('输入没实时写回');
+    if (codeBlockOf().querySelectorAll('.code-gutter div').length !== 2) fail('行号没跟着更新');
+
+    // 超长行：高亮层跟着输入框一起横向滚动
+    const long = 'const long = "' + 'x'.repeat(160) + '";';
+    ta.value = long;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(100);
+    ta.scrollLeft = 40;
+    ta.dispatchEvent(new Event('scroll'));
+    await wait(60);
+    const tf = codeBlockOf().querySelector('.code-hl').style.transform;
+    if (!tf.includes('translateX(-40px)')) fail('高亮层没跟着横向滚动：' + tf);
+
+    // 兜底：即使 blk.src 因为某次重排被清空，写回时也要以 DOM 里的代码为准
+    f.pane._blocks[0].src = '';
+    f.pane.writeBack();
+    if (!ws.note(note.id).content.includes('const long')) fail('写回时没兜住 DOM 里的代码');
+
+    await restoreNoteContent(note, original);
+    return '原地输入 / 行号 / 语言 / 高亮都正常';
+  });
+
+  await run('代码块按键：回车缩进、Tab 制表、Shift+Tab 退格', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    await setCodeContent('```js\nif (x) {\n}\n```');
+    f.pane.focusCode(0, 'end');
+    let ta = codeInputOf();
+    ta.setSelectionRange(8, 8);                 // "if (x) {" 的末尾
+    keyOn(ta, 'Enter');
+    await wait(100);
+    if (!ta.value.startsWith('if (x) {\n  \n}')) fail('回车没自动缩进：' + JSON.stringify(ta.value));
+    if (!ws.note(note.id).content.includes('if (x) {\n  \n}')) fail('回车换行没写回');
+
+    ta.setSelectionRange(0, 0);
+    keyOn(ta, 'Tab');
+    await wait(100);
+    if (ta.value[0] !== '\t') fail('Tab 没插入制表符：' + JSON.stringify(ta.value.slice(0, 4)));
+
+    ta.setSelectionRange(1, 1);
+    keyOn(ta, 'Tab', { shiftKey: true });
+    await wait(100);
+    if (ta.value[0] === '\t') fail('Shift+Tab 没退掉制表符');
+
+    await restoreNoteContent(note, original);
+    return 'Enter 缩进 2 空格 / Tab 制表符 / Shift+Tab 退回';
+  });
+
+  await run('代码块：↓ 从末行出去、↑ 从首行出去、块首退格不拆围栏', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+
+    // 下面已经有段落：↓ 直接落到它开头
+    await setCodeContent('```js\nconst a = 1;\n```\n\n尾部');
+    f.pane.focusCode(0, 'end');
+    keyOn(codeInputOf(), 'ArrowDown');
+    await wait(140);
+    if (f.pane._focus !== 1) fail('↓ 没落到下一段：' + f.pane._focus);
+    if (document.activeElement && document.activeElement.classList.contains('code-input')) fail('焦点还在代码里');
+
+    // 下面是代码块：Typora 会补一个空段落
+    await setCodeContent('```js\nconst a = 1;\n```');
+    f.pane.focusCode(0, 'end');
+    keyOn(codeInputOf(), 'ArrowDown');
+    await wait(140);
+    if (f.pane._blocks.length !== 2 || f.pane._blocks[1].type !== 'empty') {
+      fail('↓ 出去没补空段落：' + f.pane._blocks.map((b) => b.type).join(','));
+    }
+
+    // 第一块是代码：↑ 在上面补空段落
+    await setCodeContent('```js\nconst a = 1;\n```');
+    f.pane.focusCode(0, 'start');
+    keyOn(codeInputOf(), 'ArrowUp');
+    await wait(140);
+    if (f.pane._blocks[0].type !== 'empty' || f.pane._blocks[1].type !== 'code') {
+      fail('↑ 出去没补空段落：' + f.pane._blocks.map((b) => b.type).join(','));
+    }
+
+    // 末尾已经是空行时再按回车：离开代码块，而不是继续往里堆空行
+    await setCodeContent('```js\nconst a = 1;\n\n```');
+    f.pane.focusCode(0, 'end');
+    await wait(100);
+    keyOn(codeInputOf(), 'Enter');
+    await wait(160);
+    if (f.pane._blocks.length !== 2 || f.pane._blocks[1].type !== 'empty') {
+      fail('末行空行回车没有离开代码块：' + f.pane._blocks.map((b) => b.type).join(','));
+    }
+    if (!ws.note(note.id).content.includes('const a = 1;')) fail('离开代码块时把代码弄丢了');
+
+    // 空代码块行首退格：不再响应，代码块保持
+    await setCodeContent('前文\n\n```\n\n```\n\n后文');
+    f.pane.focusCode(1, 'start');
+    keyOn(codeInputOf(), 'Backspace');
+    await wait(140);
+    if (!codeBlockOf()) fail('块首退格把代码块拆掉了');
+    if (!ws.note(note.id).content.includes('```')) fail('块首退格把围栏删掉了');
+    if (f.pane._blocks[1].type !== 'code') fail('块首退格改变了代码块类型');
+
+    // 代码块下面那段的开头按退格：文字要接进代码，不能写丢
+    await setCodeContent('```js\nconst a = 1;\n```\n\n后文');
+    f.pane.focusBlock(1, 'start');
+    await wait(100);
+    const afterTxt = document.querySelector('#preview .blk[data-i="1"] .blk-txt');
+    if (!afterTxt) fail('代码块后面的段落没渲染');
+    keyOn(afterTxt, 'Backspace');
+    await wait(140);
+    if (!ws.note(note.id).content.includes('后文')) fail('段首退格把后面的文字吞了');
+    if (f.pane._blocks[0].type !== 'code') fail('上一块不是代码了');
+
+    // 代码块后面的空块里输入再回车：代码和前面的标题都不能丢
+    await setCodeContent('# 标题\n\n```js\nconst a = 1;\n```');
+    f.pane.appendBlock();
+    await wait(160);
+    const lastIndex = f.pane._blocks.length - 1;
+    let lastTxt = document.querySelector('#preview .blk[data-i="' + lastIndex + '"] .blk-txt');
+    lastTxt.innerHTML = '空块里输入';
+    lastTxt.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(80);
+    f.pane.focusBlock(lastIndex, 'end');
+    await wait(80);
+    lastTxt = document.querySelector('#preview .blk[data-i="' + lastIndex + '"] .blk-txt');
+    keyOn(lastTxt, 'Enter');
+    await wait(160);
+    const afterEmpty = ws.note(note.id).content;
+    if (!afterEmpty.includes('const a = 1;')) fail('空块里回车把前面的代码弄丢了');
+    if (!afterEmpty.includes('# 标题')) fail('空块里回车把前面的标题弄丢了');
+    if (!afterEmpty.includes('空块里输入')) fail('空块里输入的文字丢了');
+
+    // 空块要有正常行高，鼠标点得中（以前只有 4px 高，容易点到代码块上）
+    const emptyNow = document.querySelector('#preview .blk-empty .blk-txt');
+    if (emptyNow && emptyNow.getBoundingClientRect().height < 18) {
+      fail('空块太矮，点不中：' + emptyNow.getBoundingClientRect().height + 'px');
+    }
+
+    // 语言标注要嵌在代码框右下角，而不是掉到代码框外面
+    await setCodeContent('```js\nconst a = 1;\n```\n\n下一块');
+    const codeBox = document.querySelector('#preview .blk-code .code-box');
+    const langBox = document.querySelector('#preview .blk-code .code-lang');
+    if (!codeBox || !langBox) fail('代码块没有语言框');
+    const cb = codeBox.getBoundingClientRect();
+    const lb = langBox.getBoundingClientRect();
+    if (lb.top < cb.top || lb.bottom > cb.bottom || lb.left < cb.left || lb.right > cb.right) {
+      fail('语言框跑到代码框外面了');
+    }
+    if (cb.bottom - lb.bottom > 14 || cb.right - lb.right > 14) {
+      fail('语言框没有贴住代码框右下角');
+    }
+
+    await restoreNoteContent(note, original);
+    return '↓ / ↑ 正常离开；块首退格不再拆代码围栏';
+  });
+
+  await run('代码块：```js + 回车建块，语言框能改围栏', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    await setCodeContent('前文');
+    f.pane.appendBlock();
+    await wait(160);
+    const blocks = [...document.querySelectorAll('#preview .blk')];
+    const txt = blocks[blocks.length - 1].querySelector('.blk-txt');
+    if (!txt) fail('没造出普通段落');
+    txt.innerHTML = '```js';
+    txt.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(80);
+    keyOn(txt, 'Enter');
+    await wait(140);
+    const last = f.pane._blocks[f.pane._blocks.length - 1];
+    if (last.type !== 'code' || last.lang !== 'js') fail('```js + 回车没变代码块：' + JSON.stringify(last));
+    const ta = codeInputOf();
+    if (!ta) fail('新代码块没有输入框');
+    if (document.activeElement !== ta) fail('光标没进代码块');
+
+    const langInput = codeBlockOf().querySelector('.code-lang');
+    langInput.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, cancelable: true, pointerId: 1, button: 0,
+    }));
+    langInput.focus();
+    langInput.value = 'python';
+    langInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(120);
+    if (!document.querySelector('.code-lang-menu')) fail('语言下拉没出来');
+    keyOn(langInput, 'Enter');
+    await wait(140);
+    if (last.lang !== 'python') fail('语言没改：' + last.lang);
+    if (!ws.note(note.id).content.includes('```python')) fail('围栏语言没写回');
+    if (codeBlockOf().querySelector('.code-lang').value !== 'python') fail('语言框没同步');
+
+    await restoreNoteContent(note, original);
+    return '```js 建块 / 语言下拉改 python 都正常';
+  });
+
+  await run('最后一块是代码块：点下方空白新建段落', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '前言\n\n```js\nconst a = 1;\n```';
+      f.pane.renderBlocks();
+      await wait(220);
+      const before = f.pane._blocks.length;
+      const preview = document.getElementById('preview');
+      const codeBox = document.querySelector('#preview .blk-code .code-box');
+      if (!codeBox) fail('没有代码块');
+      const pr = preview.getBoundingClientRect();
+      const cr = codeBox.getBoundingClientRect();
+      const x = Math.round(pr.left + pr.width / 2);
+      const y = Math.round(Math.min(pr.bottom - 12, cr.bottom + 34));
+      preview.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true, clientX: x, clientY: y,
+      }));
+      await wait(220);
+      const last = f.pane._blocks[f.pane._blocks.length - 1];
+      if (f.pane._blocks.length !== before + 1) {
+        fail('点代码块下面没有新增块：' + before + ' → ' + f.pane._blocks.length);
+      }
+      if (!last || last.type !== 'empty') fail('新增的不是空段落：' + (last && last.type));
+      if (f.pane._focus !== f.pane._blocks.length - 1) fail('没有跳到新块');
+      if (!ws.note(note.id).content.includes('const a = 1;')) fail('新增块时把代码弄丢了');
+      return '最后一块代码 → 点下方空白新增并跳转段落';
+    } finally {
+      await restoreNoteContent(note, original);
+    }
+  });
+
+  await run('代码块语言标注：编辑时隐藏，靠近显示', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '```js\nconst a = 1;\n```\n\n后文';
+      f.pane.renderBlocks();
+      await wait(220);
+      f.pane.focusCode(0, 'end');
+      await wait(200);
+      const block = document.querySelector('#preview .blk-code');
+      const foot = block.querySelector('.code-foot');
+      if (!block.classList.contains('cur')) fail('代码块没有进入编辑态');
+      if (getComputedStyle(foot).opacity !== '0') fail('编辑代码时语言框还显示着');
+
+      const box = block.querySelector('.code-box').getBoundingClientRect();
+      block.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: Math.round(box.right - 30),
+        clientY: Math.round(box.bottom - 16),
+      }));
+      await wait(180);
+      if (!block.classList.contains('lang-near')) fail('鼠标靠近右下角没有触发展示');
+      if (getComputedStyle(foot).opacity !== '1') fail('鼠标靠近后语言框还是隐藏的');
+
+      block.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false }));
+      await wait(180);
+      if (getComputedStyle(foot).opacity !== '0') fail('鼠标离开后语言框没有重新隐藏');
+
+      f.pane.focusBlock(1, 'end');
+      await wait(200);
+      if (getComputedStyle(foot).opacity !== '1') fail('不编辑代码时语言框没有常显');
+      return '编辑隐藏 / 靠近显示 / 非编辑常显';
+    } finally {
+      await restoreNoteContent(note, original);
+    }
+  });
+
+  await run('代码块：中文精确占两个字符宽', async () => {
+    await (document.fonts && document.fonts.ready);
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:pre;'
+      + 'font:13.5px Consolas,"FYN Code CJK",monospace;';
+    document.body.appendChild(host);
+    const widthOf = (text) => {
+      host.textContent = text;
+      const range = document.createRange();
+      range.selectNodeContents(host);
+      return range.getBoundingClientRect().width;
+    };
+    const space = widthOf(' ');
+    const latin = widthOf('M');
+    const cjk = widthOf('中');
+    host.remove();
+    if (Math.abs(latin - space) > .05) fail(`代码块空格和字母不等宽：${space} / ${latin}`);
+    if (Math.abs(cjk - space * 2) > .2) {
+      fail(`中文不是精确两格：${cjk}，两格 ${space * 2}`);
+    }
+    return `代码格 ${space.toFixed(2)}px，中文 ${cjk.toFixed(2)}px`;
+  });
+
+  await run('标题块最前面回车：插入空段落，标题保留', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '## 原标题';
+      f.pane.renderBlocks();
+      await wait(180);
+      f.pane.focusBlock(0, 'start');
+      await wait(100);
+      const txt = document.querySelector('#preview .blk-h2 .blk-txt');
+      if (!txt) fail('标题块没渲染');
+      txt.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter', bubbles: true, cancelable: true,
+      }));
+      await wait(240);
+      if (f.pane._blocks.length !== 2) fail('回车后块数不对：' + f.pane._blocks.length);
+      if (!['p', 'empty'].includes(f.pane._blocks[0].type) || f.pane._blocks[0].inline) {
+        fail('标题上面没有插入空段落：' + JSON.stringify(f.pane._blocks[0]));
+      }
+      if (f.pane._blocks[1].type !== 'h2' || f.pane._blocks[1].inline !== '原标题') {
+        fail('原标题被降级或弄丢：' + JSON.stringify(f.pane._blocks[1]));
+      }
+      if (f.pane._focus !== 0) fail('光标没落到上面的空段落');
+      return '标题前回车 → 空段落在上，标题格式和文字保留';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
+  });
+
+  await run('前置空标题时，在标题首行回车能看到新空行', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      note.content = '### \n\n### 1.bank 标题';
+      f.pane.renderBlocks();
+      await wait(180);
+      f.pane.focusBlock(1, 'start');
+      await wait(100);
+      const h = document.querySelector('#preview .blk[data-i="1"] .blk-txt');
+      if (!h) fail('标题块没渲染');
+      h.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter', bubbles: true, cancelable: true,
+      }));
+      await wait(260);
+      const blocks = f.pane._blocks;
+      if (blocks.length !== 3) fail('块数不对：' + blocks.length);
+      if (!['p', 'empty'].includes(blocks[1].type) || blocks[1].inline) {
+        fail('标题前没有新空行：' + JSON.stringify(blocks[1]));
+      }
+      if (blocks[2].type !== 'h3' || !blocks[2].inline.includes('1.bank')) {
+        fail('标题被改坏了：' + JSON.stringify(blocks[2]));
+      }
+      const newEl = document.querySelector('#preview .blk[data-i="1"]');
+      if (!newEl || newEl.classList.contains('blk-leading-empty') || getComputedStyle(newEl).display === 'none') {
+        fail('新空行被首行标题的收空逻辑藏起来了');
+      }
+      if (f.pane._focus !== 1) fail('光标没落到新空行');
+      return '前置空标题 + 标题首行回车 → 可见新空行，标题保留';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(120);
+    }
+  });
+
+  await run('代码块：停手后自动识别语言，手动改过的不覆盖', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(200);
+    try {
+      await setCodeContent('```\n\n```');
+      f.pane.focusCode(0, 'end');
+      await wait(80);
+      let ta = codeInputOf();
+      ta.value = 'const x = 1;\nconsole.log(x);';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(1100);
+      if (f.pane._blocks[0].lang !== 'javascript') {
+        fail('没识别成 javascript：' + f.pane._blocks[0].lang);
+      }
+      if (!ws.note(note.id).content.includes('```javascript')) fail('语言没写回围栏');
+      if (codeBlockOf().querySelector('.code-lang').value !== 'javascript') fail('语言框没同步');
+
+      // 手动改成 python 后，再输入 HTML 也不应被自动覆盖
+      f.pane.commitLang(0, 'python', false);
+      await wait(120);
+      ta = codeInputOf();
+      ta.value = '<!DOCTYPE html>\n<html><body>hi</body></html>';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(1100);
+      if (f.pane._blocks[0].lang !== 'python') {
+        fail('手动语言被自动覆盖了：' + f.pane._blocks[0].lang);
+      }
+      return '自动识别 javascript，手动 python 保持';
+    } finally {
+      await restoreNoteContent(note, original);
+    }
   });
 
   return out;

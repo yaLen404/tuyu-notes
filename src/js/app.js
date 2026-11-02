@@ -40,6 +40,11 @@ let pane = null;
 let saveTimer = null;
 let collapsed = false;
 let savedBounds = null;
+let viewMode = 'both';
+let lastWindowFit = null;
+
+const MIN_WIN_W = 640;
+const MIN_WIN_H = 560;
 
 const COLORS = ['#fb464c', '#e9973f', '#e0de71', '#44cf6e', '#53dfdd', '#a882ff'];
 
@@ -71,6 +76,9 @@ async function boot() {
 
   canvas.attach();
   pane.setScale(ws.state.zoom || 1);
+  viewMode = ['left', 'right', 'both'].includes(ws.state.viewMode) ? ws.state.viewMode : 'both';
+  setViewMode(viewMode, { persist: false });
+  if (api.win.onWindowState) api.win.onWindowState(applyWindowFit);
   showNote(ws.note(ws.state.selected) || lastNoteOfGraph());
   dom.searchInput.value = ws.state.query || '';
   canvas.query = ws.state.query || '';
@@ -114,24 +122,62 @@ const canvasHooks = {
   onResize() { updateStatus(); },
   onView() { placeToolbar(); },
   onZoom() { updateStatus(); },
-  onLinkDrop(src, dst, side) {
+  /** 拖连线端点：换边或换到另一张卡片 */
+  onLinkRepin(link, end, cardId, side) {
+    const { src, dst } = link;
+    if (!src || !dst) return;
+    const oldOther = end === 'from' ? dst : src;
+    if (cardId === oldOther) return;                 // 不能连自己
+    const sides = ws.getSides(src, dst) || {};
+    pushUndo();
+    if (cardId === (end === 'from' ? src : dst)) {
+      // 还是同一张卡：只换这一端的边
+      ws.setSides(src, dst, end === 'from'
+        ? { from: side, to: sides.to }
+        : { from: sides.from, to: side });
+      canvas.render();
+    } else {
+      // 换到别的卡片：拆掉旧线，按新端点重建
+      ws.removeLink(src, dst);
+      const ns = end === 'from' ? cardId : src;
+      const nd = end === 'from' ? dst : cardId;
+      ws.addLink(ns, nd);
+      ws.setSides(ns, nd, end === 'from'
+        ? { from: side, to: sides.to }
+        : { from: sides.from, to: side });
+      canvas.selectedLink = { src: ns, dst: nd };
+      canvas.render();
+    }
+    scheduleSave();
+    updateStatus();
+  },
+
+  onLinkDrop(src, dst, side, toSide) {
+    // 已经连着同样的一条线（默认样式）→ 什么都不做，保持原来的样子
+    const existing = (ws.note(src).links || []).find((l) => l.id === dst);
+    // 已经连着这条线了：原样保留，不新增、不改接口、不留撤销点
+    if (existing) return;
     pushUndo();
     ws.addLink(src, dst);
-    // 接口定死：源端用你拖出来的那条边，目标端用"面向源卡片"的那条边
+    // 接口定死：源端用拖出来的那条边；目标端优先用"松手时鼠标靠近的那条边"
     const a = canvas.records.get(src);
     const b = canvas.records.get(dst);
     if (a && b) {
-      const [from, to] = geometry.facingSides(
+      const [from, autoTo] = geometry.facingSides(
         { x: a.x, y: a.y, w: a.w, h: a.h },
         { x: b.x, y: b.y, w: b.w, h: b.h },
       );
+      const to = toSide || autoTo;
       ws.setSides(src, dst, { from: side || from, to });
     }
     canvas.render();
     pane.renderMeta();
     updateStatus();
   },
-  onLinkSelect(pair, x, y) { showLinkToolbar(pair, x, y); },
+  onLinkSelect(pair, x, y) {
+    if (!pair) { if (dom.linkToolbar) dom.linkToolbar.hidden = true; linkToolbarPair = null; return; }
+    showLinkToolbar(pair, x, y);
+  },
   onContext(kind, payload, x, y) { openContextMenu(kind, payload, x, y); },
 };
 
@@ -154,7 +200,10 @@ const paneHooks = {
     pushUndo();
     ws.renameNote(id, title);
     canvas.reload();
-    showNote(ws.note(id));
+    // 标题改名不要 showNote 重放整篇：那会把正文的撤销历史清空
+    const note = ws.note(id);
+    if (pane.note && note && pane.note.id === note.id) pane.renderMeta();
+    else showNote(note);
     updateStatus();
     scheduleSave();
   },
@@ -510,34 +559,50 @@ function toggleNoteTodo() {
   scheduleSave();
 }
 
-/** 临时让画布占满整条（把笔记栏收起来），再点一次还原 */
-let canvasWide = false;
-let wideSplit = null;
-function toggleCanvasWide() {
-  canvasWide = !canvasWide;
-  if (canvasWide) {
-    wideSplit = ws.state.split;
-    dom.body.classList.add('canvas-wide');
-    dom.btnFit.classList.add('active');
-  } else {
-    dom.body.classList.remove('canvas-wide');
-    dom.btnFit.classList.remove('active');
-    if (wideSplit != null) ws.state.split = wideSplit;
-    applySplit();
+/** 布局：both / left（只看知识体系图）/ right（只看笔记） */
+function setViewMode(mode, opts = {}) {
+  const next = ['both', 'left', 'right'].includes(mode) ? mode : 'both';
+  viewMode = next;
+  dom.body.classList.toggle('view-left', next === 'left');
+  dom.body.classList.toggle('view-right', next === 'right');
+  dom.btnFit.classList.toggle('active', next === 'left');
+  if (next === 'both') applySplit();
+  if (opts.persist !== false) {
+    ws.state.viewMode = next;
+    scheduleSave();
   }
-  // 尺寸变了，重算视图和浮层位置
+  // 尺寸变了，重算视图 / 代码块高度 / 浮层位置
   requestAnimationFrame(() => {
-    canvas.applyView();
+    if (canvas) canvas.applyView();
+    if (pane) pane.syncScale();
     placeToolbar();
     syncLinkToolbar();
     updateStatus();
   });
 }
 
+/** Windows 贴边成半屏时只看右边；离开半屏 / 全屏时恢复左右分栏 */
+function applyWindowFit(state) {
+  const fit = state && state.full ? 'full' : (state && state.half ? 'half' : 'other');
+  if (fit === 'half') {
+    if (lastWindowFit !== 'half') setViewMode('right', { persist: false });
+  } else if (lastWindowFit === 'half') {
+    setViewMode('both', { persist: false });
+  }
+  lastWindowFit = fit;
+}
+
+/** 画布按钮：在"只看左边"和"左右分栏"之间切换 */
+function toggleCanvasWide() {
+  setViewMode(viewMode === 'left' ? 'both' : 'left');
+}
+
 function placeToolbar() {
   // 连线工具栏跟着"选中的那条线"走，没选就让位
   if (!canvas || !canvas.selectedLink) hideLinkToolbar();
   else if (linkToolbarPair) syncLinkToolbar();
+  // 多选时不显示卡片工具条（批量操作不该针对单张卡片）
+  if (canvas && canvas.multi && canvas.multi.size > 1) { dom.nodeToolbar.hidden = true; return; }
   if (!canvas || !canvas.selected) { dom.nodeToolbar.hidden = true; return; }
   const rect = canvas.screenRectOf(canvas.selected);
   if (!rect) { dom.nodeToolbar.hidden = true; return; }
@@ -673,7 +738,12 @@ function menuSpec(name) {
     ];
   }
   if (name === 'view') {
+    const mode = viewMode;
     return [
+      { label: '只显示左边（知识体系图）', checked: mode === 'left', action: () => setViewMode('left') },
+      { label: '只显示右边（笔记）', checked: mode === 'right', action: () => setViewMode('right') },
+      { label: '恢复左右分栏', checked: mode === 'both', action: () => setViewMode('both') },
+      { sep: true },
       { label: '笔记字号放大', accel: 'Ctrl+＋', action: () => zoomNote(1.1) },
       { label: '笔记字号缩小', accel: 'Ctrl+－', action: () => zoomNote(1 / 1.1) },
       { label: '笔记字号恢复默认', accel: 'Ctrl+0', action: () => zoomNote(0) },
@@ -795,13 +865,14 @@ function placeLinkToolbar() {
   const mb = canvas.toScreen([b.x + b.w / 2, b.y + b.h / 2]);
   const midX = (ma[0] + mb[0]) / 2;
   const midY = (ma[1] + mb[1]) / 2;
+  const topY = Math.min(ma[1], mb[1]);   // 连线上最高的那一端
   const w = el.offsetWidth;
   const h = el.offsetHeight;
   const cw = dom.canvas.clientWidth;
   const ch = dom.canvas.clientHeight;
   // 永远放在连线中点的上方；上方放不下再退到下方
-  let top = midY - h - 14;
-  if (top < 6) top = midY + 16;
+  let top = topY - h - 34;               // 抬到整条线上方，别挡住两端的落点
+  if (top < 6) top = midY + 20;
   el.style.left = Math.max(6, Math.min(cw - w - 6, midX - w / 2)) + 'px';
   el.style.top = Math.max(6, Math.min(ch - h - 6, top)) + 'px';
 }
@@ -1246,28 +1317,8 @@ function bindChrome() {
   dom.btnZoomReset.addEventListener('click', () => canvas.setZoom(1));
   dom.btnFit.addEventListener('click', () => toggleCanvasWide());
 
-  // 标题栏拖动 / 双击最大化
-  let drag = null;
-  dom.titlebar.addEventListener('pointerdown', async (e) => {
-    if (e.target.closest('button')) return;
-    const bounds = await api.win.bounds();
-    drag = { sx: e.screenX, sy: e.screenY, bounds };
-    dom.titlebar.setPointerCapture?.(e.pointerId);
-  });
-  dom.titlebar.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const dx = e.screenX - drag.sx;
-    const dy = e.screenY - drag.sy;
-    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
-    api.win.setBounds({ x: drag.bounds.x + dx, y: drag.bounds.y + dy,
-      width: drag.bounds.width, height: drag.bounds.height });
-  });
-  dom.titlebar.addEventListener('pointerup', () => { drag = null; });
-  dom.titlebar.addEventListener('dblclick', (e) => {
-    if (e.target.closest('button')) return;
-    dom.btnMax.click();
-  });
-
+  // 标题栏拖动 / 双击最大化交给系统原生处理（-webkit-app-region: drag），
+  // 这样 Windows 的贴边分屏 / Aero Snap 才能生效。
   window.addEventListener('resize', () => { placeToolbar(); });
 
   api.win.onMaximized((max) => {
@@ -1282,7 +1333,7 @@ async function toggleCollapse() {
   if (!collapsed) {
     savedBounds = await api.win.bounds();
     const work = { width: window.screen.availWidth, height: window.screen.availHeight };
-    // 先把最小尺寸放开，否则 880x560 的下限会把"收起"顶回去
+    // 先把最小尺寸放开，否则 640x560 的下限会把"收起"顶回去
     if (api.win.minSize) await api.win.minSize(120, 40);
     await api.win.setBounds({
       x: work.width - 380, y: work.height - 60, width: 360, height: 44, force: true,
@@ -1290,7 +1341,7 @@ async function toggleCollapse() {
     collapsed = true;
   } else {
     if (savedBounds) await api.win.setBounds(savedBounds);
-    if (api.win.minSize) await api.win.minSize(880, 560);
+    if (api.win.minSize) await api.win.minSize(MIN_WIN_W, MIN_WIN_H);
     collapsed = false;
   }
 }
@@ -1309,7 +1360,7 @@ function bindResize() {
       const dx = e.screenX - drag.sx;
       const dy = e.screenY - drag.sy;
       const b = { ...drag.bounds };
-      const minW = 880, minH = 560;
+      const minW = MIN_WIN_W, minH = MIN_WIN_H;
       if (drag.edge.includes('e')) b.width = Math.max(minW, drag.bounds.width + dx);
       if (drag.edge.includes('s')) b.height = Math.max(minH, drag.bounds.height + dy);
       if (drag.edge.includes('w')) {
@@ -1329,23 +1380,89 @@ function bindResize() {
 // ---------------------------------------------------------------- 分栏
 function bindSplitter() {
   let drag = null;
+  const MIN_LEFT = 300;
+  const MIN_RIGHT = 320;
+  // 收起判定只占最小宽度的 1/4：要拖得很靠边才切单栏
+  const SNAP_LEFT = MIN_LEFT / 4;
+  const SNAP_RIGHT = MIN_RIGHT / 4;
+  const setCollapsed = (side) => {
+    dom.body.classList.toggle('split-collapse-left', side === 'left');
+    dom.body.classList.toggle('split-collapse-right', side === 'right');
+  };
   dom.splitter.addEventListener('pointerdown', (e) => {
-    drag = { sx: e.clientX, width: dom.leftPane.getBoundingClientRect().width };
+    drag = {
+      sx: e.clientX,
+      width: dom.leftPane.getBoundingClientRect().width,
+      split: ws.state.split,
+      collapsed: null,
+    };
+    dom.body.classList.add('split-drag');
+    dom.body.classList.remove('split-at-min', 'split-at-max');
+    setCollapsed(null);
     try { dom.splitter.setPointerCapture(e.pointerId); } catch (_e) { /* 合成事件没有真实指针 */ }
     e.preventDefault();
   });
   dom.splitter.addEventListener('pointermove', (e) => {
     if (!drag) return;
     const total = dom.body.clientWidth;
-    const width = Math.max(300, Math.min(total - 320, drag.width + (e.clientX - drag.sx)));
+    const raw = drag.width + (e.clientX - drag.sx);
+    dom.body.classList.toggle('split-at-min', raw < MIN_LEFT);
+    dom.body.classList.toggle('split-at-max', total - raw < MIN_RIGHT);
+    // VS Code 式：越过最小宽度的一半就先收起这一栏，而不是等松手才跳
+    if (raw < SNAP_LEFT) {
+      drag.collapsed = 'left';
+      setCollapsed('left');
+      placeToolbar();
+      return;
+    }
+    if (total - raw < SNAP_RIGHT) {
+      drag.collapsed = 'right';
+      setCollapsed('right');
+      placeToolbar();
+      return;
+    }
+    drag.collapsed = null;
+    setCollapsed(null);
+    const width = Math.max(MIN_LEFT, Math.min(total - MIN_RIGHT, raw));
     dom.leftPane.style.flex = `0 0 ${width}px`;
     dom.leftPane.style.width = `${width}px`;
     ws.state.split = Math.round((width / total) * 1000) / 1000;
     placeToolbar();
   });
   dom.splitter.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const collapsed = drag.collapsed;
+    const before = drag.split;
     drag = null;
+    dom.body.classList.remove('split-drag', 'split-at-min', 'split-at-max');
+    setCollapsed(null);
+    if (collapsed === 'left') {
+      ws.state.split = before;
+      setViewMode('right');
+      return;
+    }
+    if (collapsed === 'right') {
+      ws.state.split = before;
+      setViewMode('left');
+      return;
+    }
     // 分栏比例立刻落盘：拖完马上关窗口也不会丢
+    saveNow();
+  });
+  const cancelDrag = () => {
+    if (!drag) return;
+    drag = null;
+    dom.body.classList.remove('split-drag', 'split-at-min', 'split-at-max');
+    setCollapsed(null);
+    applySplit();
+  };
+  dom.splitter.addEventListener('pointercancel', cancelDrag);
+  dom.splitter.addEventListener('lostpointercapture', cancelDrag);
+  // VS Code 的 sash 双击：恢复均分
+  dom.splitter.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    ws.state.split = 0.5;
+    applySplit();
     saveNow();
   });
   applySplit();
@@ -1372,6 +1489,10 @@ function bindShortcuts() {
     const inField = typing || inPreview;
     // 焦点在笔记正文里：撤销 / 重做走笔记自己的内容历史
     const inNote = inPreview;
+    // 代码 / 源码输入框：撤销走笔记内容历史，不能交给浏览器的全局撤销，
+    // 否则输入框自己的历史一空，就可能把上一次在标题里打的字撤掉。
+    const inCodeInput = Boolean(el && el.closest && el.closest('.code-input, .blk-editor'));
+    const inLangInput = Boolean(el && el.closest && el.closest('.code-lang'));
     const ctrl = e.ctrlKey || e.metaKey;
 
     if (ctrl && e.key.toLowerCase() === 'n' && !e.shiftKey) { e.preventDefault(); newNote(); return; }
@@ -1380,16 +1501,34 @@ function bindShortcuts() {
     if (ctrl && e.key === 'Tab') { e.preventDefault(); nextGraph(); return; }
     // 撤销 / 重做：笔记里先撤笔记内容，其它地方才走画布那套；普通输入框交给浏览器
     if (ctrl && e.shiftKey && e.key.toLowerCase() === 'z') {
+      if (inCodeInput) {
+        e.preventDefault();
+        pane.redoNote();
+        return;
+      }
+      if (inLangInput) return;
       if (inNote && pane.redoNote()) { e.preventDefault(); return; }
       if (!inField) { e.preventDefault(); redo(); return; }
       return;
     }
     if (ctrl && e.key.toLowerCase() === 'y') {
+      if (inCodeInput) {
+        e.preventDefault();
+        pane.redoNote();
+        return;
+      }
+      if (inLangInput) return;
       if (inNote && pane.redoNote()) { e.preventDefault(); return; }
       if (!inField) { e.preventDefault(); redo(); return; }
       return;
     }
     if (ctrl && e.key.toLowerCase() === 'z') {
+      if (inCodeInput) {
+        e.preventDefault();
+        pane.undoNote();
+        return;
+      }
+      if (inLangInput) return;
       if (inNote && pane.undoNote()) { e.preventDefault(); return; }
       if (!inField) { e.preventDefault(); undo(); return; }
       return;
@@ -1411,7 +1550,22 @@ function bindShortcuts() {
     if (!inCanvas) return;
     if (e.key === 'F5') { e.preventDefault(); relayout(); return; }
     if (e.key === 'f' || e.key === 'F') { e.preventDefault(); canvas.fit(); return; }
-    if (e.key === 'Delete' && canvas.selected) { e.preventDefault(); deleteNote(canvas.selected); }
+    if (e.key === 'Delete' && (canvas.selected || (canvas.multi && canvas.multi.size))) {
+      e.preventDefault();
+      // 多选时删掉整组
+      const ids = canvas.multi && canvas.multi.size > 1 ? [...canvas.multi] : [canvas.selected];
+      pushUndo();
+      for (const id of ids) {
+        if (!id) continue;
+        ws.deleteNote(id);
+      }
+      canvas.multi.clear();
+      canvas.selected = null;
+      canvas.render();
+      updateStatus();
+      scheduleSave();
+      return;
+    }
   });
 
   // Ctrl+滚轮：只缩放右栏字号
@@ -1436,7 +1590,7 @@ window.__fyn = {
   get pane() { return pane; },
   newNote, deleteNote, selectNote, switchGraph, newGraph, tidy, relayout,
   setCardColor, openPopover, menuSpec, saveNow, undo, redo, zoomNote,
-  setFocusOnly, placeToolbar, api, geometry, setLinkShape, setLinkArrow,
+  setFocusOnly, setViewMode, applyWindowFit, placeToolbar, api, geometry, setLinkShape, setLinkArrow,
   followLink, createMissing, branchFrom, repinLink, removeLink, repinAll,
   showHelp, showAbout, menuAction: (menu, idx) => menuSpec(menu)[idx],
 };

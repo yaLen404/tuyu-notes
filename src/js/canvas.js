@@ -47,6 +47,7 @@ export class Canvas {
     this.selected = null;
     this.hover = null;
     this.selectedLink = null;   // {src, dst}
+    this.multi = new Set();     // 多选：被一起选中的卡片 id
     this.hoverLink = null;
     this.query = '';
     this.focusOnly = false;
@@ -138,10 +139,17 @@ export class Canvas {
     const tx = r.width / 2 + this.cam[0] * this.zoom;
     const ty = r.height / 2 + this.cam[1] * this.zoom;
     this.world.style.transform = `translate(${tx}px, ${ty}px) scale(${this.zoom})`;
-    const grid = GRID * this.zoom;
+    // 缩得太小时点会糊成一片：按比例减少点的个数（网格间距翻倍/三倍）
+    const step = this.zoom >= 0.7 ? 1 : this.zoom >= 0.45 ? 2 : 3;
+    const grid = GRID * this.zoom * step;
     this.root.style.backgroundSize = `${grid}px ${grid}px`;
     this.root.style.backgroundPosition = `${tx}px ${ty}px`;
     this.root.style.setProperty('--z', String(this.zoom));
+    // 缩小时点会显得又密又白：按缩放把点的颜色压暗一点
+    // 基准色本身也调暗（#2a2a2a），缩小时再轻微收敛，整体不刺眼
+    const dim = this.zoom < 0.55 ? 0.78 : this.zoom < 0.75 ? 0.85 : this.zoom < 0.95 ? 0.93 : 1;
+    const c = Math.round(0x2a * dim);
+    this.root.style.setProperty('--dot', `rgb(${c}, ${c}, ${c})`);
     if (this.hooks.onView) this.hooks.onView();
   }
 
@@ -300,6 +308,10 @@ export class Canvas {
 
   // ---------------------------------------------------------------- 渲染
   render() {
+    // 折叠卡无论历史高度是多少，一律收成标题条（新建/命名后不会再出现"高高的空盒子"）
+    for (const rec of this.records.values()) {
+      if (rec.note && rec.note.hideBody && rec.h > 40) rec.h = 40;
+    }
     const html = [];
     const order = [...this.records.keys()].filter((id) => this.visible(this.records.get(id).note));
     order.sort((a, b) => (a === this.selected ? 1 : 0) - (b === this.selected ? 1 : 0));
@@ -316,7 +328,7 @@ export class Canvas {
     const cls = ['card'];
     if (note.hideBody) cls.push('compact');
     if (note.color) cls.push('colored');
-    if (note.id === this.selected) cls.push('selected');
+    if (note.id === this.selected || (this.multi && this.multi.has(note.id))) cls.push('selected');
     if (note.id === this.hover) cls.push('hover');
     if (!this.visible(note)) cls.push('dim');
     const style = [`--t-size:${note.titleSize || 14}px`, `--t-off:${note.titleOffset || 0}px`, 
@@ -387,15 +399,16 @@ export class Canvas {
       const strokeAttr = width !== 4 ? ` stroke-width="${width}"` : '';
       // 选中这条线时，把两端真正落在哪个"接口"画出来（换边时一眼能看见）
       if (sel) {
-        for (const p of [path.start, path.end]) {
-          ports.push(`<circle class="port" cx="${p[0]}" cy="${p[1]}" r="${9 / this.zoom}" />`);
-        }
+        [path.start, path.end].forEach((p, ei) => {
+          ports.push(`<circle class="port" cx="${p[0]}" cy="${p[1]}" r="${10 / this.zoom}" data-end="${ei === 0 ? 'from' : 'to'}" />`);
+        });
       }
       paths.push(`<path class="${cls}" d="${path.d}"${markerId}${strokeAttr} data-src="${src}" data-dst="${dst}"></path>`);
       hits.push(`<path class="hit" d="${path.d}" data-hitsrc="${src}" data-hitdst="${dst}"></path>`);
     }
-    this.edgeLayer.innerHTML = paths.join('') + ports.join('');
-    this.edgeHit.innerHTML = hits.join('');
+    this.edgeLayer.innerHTML = paths.join('');
+    // 端点小圆点放进最上面的命中层，否则会被 path.hit 盖住、点不到
+    this.edgeHit.innerHTML = hits.join('') + ports.join('');
   }
 
   /** 箭头大小可以逐条调，所以按 (状态 + 尺寸) 动态建 marker */
@@ -448,9 +461,12 @@ export class Canvas {
 
   // ---------------------------------------------------------------- 选择
   select(id, { scroll = false } = {}) {
-    if (this.selected === id) return;
+    if (this.multi.size) { this.multi.clear(); }
+    if (this.selected === id) { this.paintSelection(); return; }
+    const hadLink = Boolean(this.selectedLink);
     this.selected = id;
     this.selectedLink = null;
+    if (hadLink && this.hooks.onLinkSelect) this.hooks.onLinkSelect(null);
     const g = this.ws.graph();
     if (g) g.selected = id;
     this.ws.state.selected = id;
@@ -461,7 +477,8 @@ export class Canvas {
 
   /** 点空白：取消选中（笔记和连线都取消），右栏回到"还没选中笔记" */
   clearSelection() {
-    if (this.selected === null && !this.selectedLink) return;
+    if (this.multi.size) this.multi.clear();
+    if (this.selected === null && !this.selectedLink) { this.paintSelection(); return; }
     this.selected = null;
     this.selectedLink = null;
     this.hoverLink = null;
@@ -475,7 +492,8 @@ export class Canvas {
 
   paintSelection() {
     for (const el of this.cardsEl.querySelectorAll('.card')) {
-      el.classList.toggle('selected', el.dataset.id === this.selected);
+      const on = el.dataset.id === this.selected || this.multi.has(el.dataset.id);
+      el.classList.toggle('selected', on);
     }
     for (const el of this.cardsEl.querySelectorAll('.card')) {
       el.classList.toggle('dim', !this.visible(this.records.get(el.dataset.id).note));
@@ -756,6 +774,18 @@ export class Canvas {
     // 以前这里会把它们当成"空白处按下"，接着 setPointerCapture 抢走指针，
     // 结果按钮的 click 永远不来 —— 表现就是"缩放条点了没反应"。
     if (t.closest && t.closest('.pill, .toolbar, .node-toolbar')) return;
+    // 选中连线后，按在两端小圆点上 → 拖着重定这一端的落点
+    const port = t.closest && t.closest('circle.port');
+    if (port && this.selectedLink) {
+      e.preventDefault();
+      const d = this.selectedLink;
+      this._drag = {
+        kind: 'repin', end: port.dataset.end, link: { src: d.src, dst: d.dst },
+        startX: e.clientX, startY: e.clientY, moved: false,
+      };
+      try { this.root.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      return;
+    }
     const handle = t.closest('.handle');
     const dot = t.closest('.dot');
     const cardEl = t.closest('.card');
@@ -777,16 +807,41 @@ export class Canvas {
       const id = card.dataset.id;
       const rec = this.records.get(id);
       const side = this.normSide(dot.dataset.side);
+      // 已选中某条连线，且按的正是它某一端的接口 → 拖着换落点
+      const sel = this.selectedLink;
+      if (sel && (id === sel.src || id === sel.dst)) {
+        const end = id === sel.src ? 'from' : 'to';
+        const sidesNow = this.ws.getSides(sel.src, sel.dst) || {};
+        const cur = end === 'from' ? sidesNow.from : sidesNow.to;
+        if (!cur || cur === side) {
+          this._drag = {
+            kind: 'repin', end, link: { src: sel.src, dst: sel.dst },
+            startX: e.clientX, startY: e.clientY, moved: false,
+          };
+          this._capture(e);
+          e.preventDefault();
+          return;
+        }
+      }
       const anchor = G.anchor({ x: rec.x, y: rec.y, w: rec.w, h: rec.h }, side);
       this._drag = { kind: 'link', src: id, side, start: this.toScreen(anchor) };
+      this.hideEdgesForConnect();
       this.showPreviewLine(this.toScreen(anchor), this.localPoint(e));
       this._capture(e);
       e.preventDefault();
       return;
     }
     if (hit) {
+      // 线和卡片不能同时选中
+      if (this.selected !== null) {
+        this.selected = null;
+        const g0 = this.ws.graph();
+        if (g0) g0.selected = null;
+        this.ws.state.selected = null;
+        this.paintSelection();
+        if (this.hooks.onSelect) this.hooks.onSelect(null);   // 让卡片工具条收起
+      }
       this.selectedLink = { src: hit.dataset.hitsrc, dst: hit.dataset.hitdst };
-      this.ws.state.selected = this.selected;
       this.renderEdges();
       this.root.focus();
       if (this.hooks.onLinkSelect) {
@@ -797,15 +852,44 @@ export class Canvas {
     }
     if (cardEl) {
       const id = cardEl.dataset.id;
+      // 自己识别双击（pointerdown 里 preventDefault 之后，浏览器不一定再发 dblclick）
+      const now = Date.now();
+      if (this._lastTap && this._lastTap.id === id && now - this._lastTap.t < 350) {
+        this._lastTap = null;
+        this.select(id);
+        this.fitWidthToTitle(id);
+        if (this.hooks.onOpen) this.hooks.onOpen(id);
+        e.preventDefault();
+        return;
+      }
+      this._lastTap = { id, t: now };
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        // 第一次加选时，把当前选中的那张也带上，形成真正的"多选组"
+        if (!this.multi.size && this.selected && this.selected !== id) this.multi.add(this.selected);
+        if (this.multi.has(id) && this.multi.size > 1) this.multi.delete(id);
+        else this.multi.add(id);
+        if (this.multi.size) this.selected = id;   // 让右栏跟着显示最后点的那张
+        this.paintSelection();
+        if (this.hooks.onSelect) this.hooks.onSelect(this.selected);
+        if (this.hooks.onView) this.hooks.onView();   // 让工具条按多选状态重新定位/隐藏
+        e.preventDefault();
+        return;
+      }
       const rec = this.records.get(id);
       const [lx, ly] = this.localPoint(e);
       const [wx, wy] = this.toWorld(lx, ly);
       // 点卡片就把键盘焦点收回画布：笔记那边会据此自动切回预览
       this.root.focus();
-      if (this.selected !== id) this.select(id);
+      // 点在"多选里已有的卡片"上：保留多选，直接整体拖
+      if (!(this.multi.size && this.multi.has(id)) && this.selected !== id) this.select(id);
+      const group = this.multi.size && this.multi.has(id) ? [...this.multi] : null;
       this._drag = {
         kind: 'move', id, startX: e.clientX, startY: e.clientY,
         x: rec.x, y: rec.y, w: rec.w, h: rec.h, moved: false,
+        group: group ? group.map((gid) => {
+          const r2 = this.records.get(gid);
+          return r2 ? { id: gid, x: r2.x, y: r2.y } : null;
+        }).filter(Boolean) : null,
       };
       this._capture(e);
       e.preventDefault();
@@ -840,6 +924,16 @@ export class Canvas {
       if (!d.moved && this.hooks.onBeforeChange) this.hooks.onBeforeChange();
       rec.x = Math.round(x * 100) / 100;
       rec.y = Math.round(y * 100) / 100;
+      if (d.group) {
+        for (const item of d.group) {
+          if (item.id === d.id) continue;
+          const r2 = this.records.get(item.id);
+          if (!r2) continue;
+          r2.x = Math.round((item.x + dx) * 100) / 100;
+          r2.y = Math.round((item.y + dy) * 100) / 100;
+          this.updateCardPosition(item.id);
+        }
+      }
       d.moved = true;
       this.updateCardPosition(d.id);
       this.renderEdges();
@@ -873,6 +967,24 @@ export class Canvas {
       this.renderEdges();
       return;
     }
+    if (d.kind === 'repin') {
+      const target = this.hitCard(e.clientX, e.clientY);
+      const other = d.end === 'from' ? d.link.dst : d.link.src;
+      // 预览线：从固定不动的那一端连到鼠标
+      const sides = this.ws.getSides(d.link.src, d.link.dst) || {};
+      const fixedId = d.end === 'from' ? d.link.dst : d.link.src;
+      const fixedSide = d.end === 'from' ? sides.to : sides.from;
+      const fr = this.records.get(fixedId);
+      if (fr) {
+        const anchor = G.anchor({ x: fr.x, y: fr.y, w: fr.w, h: fr.h }, fixedSide || 'left');
+        this.showPreviewLine(this.toScreen(anchor), this.localPoint(e));
+      }
+      this.hover = target && target !== other ? target : null;
+      this.paintHover();
+      if (this.hover) this.showTargetPort(this.hover, other, e.clientX, e.clientY);
+      else this.showTargetPort(null, other);
+      return;
+    }
     if (d.kind === 'link') {
       const anchor = this.toScreen(G.anchor(
         { x: this.records.get(d.src).x, y: this.records.get(d.src).y,
@@ -881,13 +993,14 @@ export class Canvas {
       const over = this.hitCard(e.clientX, e.clientY);
       this.hover = over && over !== d.src ? over : null;
       this.paintHover();
-      this.showTargetPort(this.hover, d.src);
+      this.showTargetPort(this.hover, d.src, e.clientX, e.clientY);
     }
   }
 
   onPointerUp(e) {
     const d = this._drag;
     this._drag = null;
+    if (d && d.kind === 'link') this.showEdgesAfterConnect();
     this.root.classList.remove('panning');
     this.clearGuides();
     this.hidePreviewLine();
@@ -897,6 +1010,16 @@ export class Canvas {
       this.persistView();
       // 只点不拖：把选中取消掉（拖动平移时保留选中）
       if (!d.moved) this.clearSelection();
+    }
+    // 多选状态下"点一下不拖"某张卡片 → 收成只选这一张
+    if (d.kind === 'move' && !d.moved && this.multi.size && this.multi.has(d.id)) {
+      this.multi.clear();
+      this.selected = d.id;
+      this.ws.state.selected = d.id;
+      this.paintSelection();
+      if (this.hooks.onSelect) this.hooks.onSelect(d.id);
+      if (this.hooks.onView) this.hooks.onView();
+      return;
     }
     if (d.kind === 'move' && d.moved) {
       this.persistPositions();
@@ -915,7 +1038,19 @@ export class Canvas {
       this.hover = null;
       this.paintHover();
       if (target && target !== d.src && this.hooks.onLinkDrop) {
-        this.hooks.onLinkDrop(d.src, target, d.side);
+        const toSide = this.sideAtPoint(this.records.get(target), e.clientX, e.clientY);
+        this.hooks.onLinkDrop(d.src, target, d.side, toSide);
+      }
+    }
+    // 重定落点：松手时落在哪张卡片的哪条边
+    if (d.kind === 'repin') {
+      this.hover = null;
+      this.paintHover();
+      const target = this.hitCard(e.clientX, e.clientY);
+      const other = d.end === 'from' ? d.link.dst : d.link.src;
+      if (target && target !== other && this.hooks.onLinkRepin) {
+        const side = this.sideAtPoint(this.records.get(target), e.clientX, e.clientY);
+        this.hooks.onLinkRepin(d.link, d.end, target, side);
       }
     }
   }
@@ -932,11 +1067,41 @@ export class Canvas {
   onDoubleClick(e) {
     if (e.target.closest('.handle') || e.target.closest('.dot')) return;
     const card = e.target.closest('.card');
-    if (card) {
-      const id = card.dataset.id;
-      this.select(id);
-      if (this.hooks.onOpen) this.hooks.onOpen(id);
-    }
+    if (!card) return;
+    const id = card.dataset.id;
+    this.select(id);
+    // 双击：把卡片宽度收到"刚好放下标题"，同时照旧把焦点交给笔记
+    this.fitWidthToTitle(id);
+    if (this.hooks.onOpen) this.hooks.onOpen(id);
+  }
+
+  /** 宽度自适应标题长度（双击卡片触发） */
+  fitWidthToTitle(id) {
+    const rec = this.records.get(id);
+    const el = this.cardsEl.querySelector(`.card[data-id="${id}"] .card-title`);
+    if (!rec || !el) return;
+    const text = (rec.note && rec.note.title) || '未命名';
+    // 用同样的字体量一遍文字宽度
+    const span = document.createElement('span');
+    const cs = getComputedStyle(el);
+    span.textContent = text;
+    span.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:nowrap;visibility:hidden;'
+      + `font:${cs.font};letter-spacing:${cs.letterSpacing}`;
+    document.body.appendChild(span);
+    const textW = Math.ceil(span.getBoundingClientRect().width);
+    span.remove();
+    const padding = 10 * 2;   // .card-head 左右内边距
+    const icon = 11 + 7;      // 图标 + 间距
+    const extra = 16;   // 右边多留一点空隙，别贴着边框
+    const next = Math.round(Math.max(MIN_W, Math.min(MAX_W, textW + padding + icon + 2 + extra)));
+    if (Math.abs(next - rec.w) < 1) return;
+    if (this.hooks.onBeforeChange) this.hooks.onBeforeChange();
+    rec.w = next;
+    rec.explicit = true;
+    this.updateCardSize(id);
+    this.renderEdges();
+    this.persistPositions();
+    this.ws.markDirty(null);
   }
 
   /** 右键时把落点那张卡片淡淡标一下（只是提示，不是"选中"） */
@@ -1011,17 +1176,30 @@ export class Canvas {
   }
 
   /** 拖新连线时，在目标卡片"将要连接的那个接口"上亮一个点 */
-  showTargetPort(targetId, srcId) {
+  showTargetPort(targetId, srcId, cx, cy) {
     if (!targetId || !this.records.has(targetId) || !this.records.has(srcId)) {
       if (this._portDot) { this._portDot.remove(); this._portDot = null; }
+      for (const el of this.cardsEl.querySelectorAll('.card')) {
+        el.querySelectorAll('.dot.near').forEach((d) => d.classList.remove('near'));
+      }
       return;
     }
     const rt = this.records.get(targetId);
     const rs = this.records.get(srcId);
-    const [side] = G.facingSides(
-      { x: rt.x, y: rt.y, w: rt.w, h: rt.h },
-      { x: rs.x, y: rs.y, w: rs.w, h: rs.h },
-    );
+    // 鼠标在卡片上时，按鼠标最近的边；否则用"面向源卡片"的那条边
+    const side = (cx != null && cy != null)
+      ? this.sideAtPoint(rt, cx, cy)
+      : G.facingSides(
+        { x: rt.x, y: rt.y, w: rt.w, h: rt.h },
+        { x: rs.x, y: rs.y, w: rs.w, h: rs.h },
+      )[0];
+    // 只显示"离鼠标最近"的那一个落点（跟普通悬停一致），不整排点亮
+    for (const el of this.cardsEl.querySelectorAll('.card')) {
+      const want = el.dataset.id === targetId;
+      el.querySelectorAll('.dot').forEach((d) => {
+        d.classList.toggle('near', want && this.normSide(d.dataset.side) === side);
+      });
+    }
     const [lx, ly] = this.toScreen(G.anchor({ x: rt.x, y: rt.y, w: rt.w, h: rt.h }, side));
     if (!this._portDot) {
       this._portDot = document.createElement('div');
@@ -1034,6 +1212,36 @@ export class Canvas {
 
   hideTargetPort() {
     if (this._portDot) { this._portDot.remove(); this._portDot = null; }
+  }
+
+  /** 鼠标位置离哪条边最近，就用哪个接口（屏幕坐标） */
+  sideAtPoint(rec, x, y) {
+    const r = this.screenRectOf(rec.note ? rec.note.id : rec.id) || null;
+    const box = r || { x: rec.x, y: rec.y, w: rec.w * this.zoom, h: rec.h * this.zoom };
+    const pts = {
+      top: [box.x + box.w / 2, box.y],
+      bottom: [box.x + box.w / 2, box.y + box.h],
+      left: [box.x, box.y + box.h / 2],
+      right: [box.x + box.w, box.y + box.h / 2],
+    };
+    let best = 'left';
+    let bestD = Infinity;
+    for (const [side, [px, py]] of Object.entries(pts)) {
+      const d = Math.hypot(x - px, y - py);
+      if (d < bestD) { bestD = d; best = side; }
+    }
+    return best;
+  }
+
+  /** 拉新线期间先把已有连线藏起来，只留预览线 */
+  hideEdgesForConnect() {
+    this.edgeLayer.style.opacity = '0';
+    this.edgeHit.style.display = 'none';
+  }
+
+  showEdgesAfterConnect() {
+    this.edgeLayer.style.opacity = '';
+    this.edgeHit.style.display = '';
   }
 
   screenRectOf(id) {

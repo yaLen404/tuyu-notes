@@ -4,6 +4,21 @@
  * 任务清单、表格、分隔线，以及本程序特有的 `[[双向链接]]` 与 `#标签`。
  */
 
+import { fenceFor } from './code.js';
+
+/** 一行是不是代码围栏的结束行：至少和开始行一样长的反引号，后面只能有空白 */
+function isFenceClose(line, fenceLen) {
+  const m = /^(`{3,})\s*$/.exec(String(line).trim());
+  return Boolean(m) && m[1].length >= fenceLen;
+}
+
+/** 一行是不是代码围栏的开始行：返回 { len, info }，不是则返回 null */
+function fenceOpen(line) {
+  const m = /^(`{3,})([^`]*)$/.exec(String(line).trim());
+  if (!m) return null;
+  return { len: m[1].length, info: m[2].trim() };
+}
+
 const INLINE_SRC = [
   '(?<esc>\\\\(?<escch>[\\\\`*_{}\\[\\]()#+\\-.!~>|$]))',        // \* 之类的转义
   '|(?<!\\$)\\$(?<tex>[^$\\n]{1,400})\\$(?!\\$)',            // $行内公式$
@@ -63,6 +78,23 @@ function imageHtml(name, alt) {
     `data-img="${escapeHtml(base)}" loading="lazy" draggable="false">`;
 }
 
+const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
+const ASCII_CHAR = /[A-Za-z0-9]/;
+
+/** 中文与英文 / 数字交界处加一个纯展示用的空隙节点（不进入 markdown 原文）。 */
+function autoSpaceHtml(text) {
+  const s = String(text == null ? '' : text);
+  let out = '';
+  let prev = 0;
+  for (const ch of s) {
+    const type = CJK_CHAR.test(ch) ? 1 : (ASCII_CHAR.test(ch) ? 2 : 0);
+    if (prev && type && prev !== type) out += '<span class="cjk-gap" aria-hidden="true"></span>';
+    out += escapeHtml(ch);
+    prev = type;
+  }
+  return out;
+}
+
 /** 行内：返回 HTML 片段。exists(title) 用来区分"链接目标是否存在"。
  *  递归调用必须用**独立的**正则实例，否则共享的 lastIndex 会把循环搞死。 */
 export function inline(text, exists = () => true) {
@@ -72,7 +104,7 @@ export function inline(text, exists = () => true) {
   let pos = 0;
   let m = re.exec(src);
   while (m) {
-    if (m.index > pos) out += escapeHtml(src.slice(pos, m.index));
+    if (m.index > pos) out += autoSpaceHtml(src.slice(pos, m.index));
     const g = m.groups || {};
     if (g.esc !== undefined) {
       out += escapeHtml(g.escch);                  // \* → *
@@ -115,7 +147,7 @@ export function inline(text, exists = () => true) {
     pos = m.index + m[0].length;
     m = re.exec(src);
   }
-  if (pos < src.length) out += escapeHtml(src.slice(pos));
+  if (pos < src.length) out += autoSpaceHtml(src.slice(pos));
   return out;
 }
 
@@ -185,11 +217,12 @@ export function renderBlocks(md, exists = () => true) {
       continue;
     }
 
-    if (line.trim().startsWith('```')) {
+    const fence = fenceOpen(line);
+    if (fence) {
       i += 1;
       const body = [];
-      while (i < n && !lines[i].trim().startsWith('```')) { body.push(lines[i]); i += 1; }
-      i += 1;
+      while (i < n && !isFenceClose(lines[i], fence.len)) { body.push(lines[i]); i += 1; }
+      if (i < n) i += 1;                      // 吃掉结束围栏
       out.push({ start, end: i, html: `<pre><code>${escapeHtml(body.join('\n'))}</code></pre>` });
       continue;
     }
@@ -419,13 +452,13 @@ export function parseBlocks(md) {
       continue;
     }
 
-    if (line.trim().startsWith('```')) {
-      const fence = line.trim().slice(3).trim();
+    const openFence = fenceOpen(line);
+    if (openFence) {
       i += 1;
       const body = [];
-      while (i < n && !lines[i].trim().startsWith('```')) { body.push(lines[i]); i += 1; }
-      i += 1;
-      out.push({ start, end: i, type: 'code', src: body.join('\n'), lang: fence });
+      while (i < n && !isFenceClose(lines[i], openFence.len)) { body.push(lines[i]); i += 1; }
+      if (i < n) i += 1;                      // 吃掉结束围栏
+      out.push({ start, end: i, type: 'code', src: body.join('\n'), lang: openFence.info });
       continue;
     }
 
@@ -492,7 +525,11 @@ export function blockToLines(block) {
     // 空块加了字就变成普通段落（空块本身不占源码行）
     case 'empty': return block.inline ? String(block.inline).split('\n') : [];
     case 'hr': return ['---'];
-    case 'code': return ['```' + (block.lang || ''), block.src || '', '```'];
+    case 'code': {
+      // 代码里本身出现 ``` 行时，围栏要更长，否则存回去会把代码截断
+      const open = fenceFor(block.src || '', block.lang || '');
+      return [open, block.src || '', open.replace(/[^`]+$/, '')];
+    }
     case 'math': return ['$$', block.src || '', '$$'];
     case 'table': return String(block.src || '').split('\n');
     case 'h1': case 'h2': case 'h3': {

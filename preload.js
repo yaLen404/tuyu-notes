@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('foryou', {
   clipboard: {
     read: () => ipcRenderer.invoke('clipboard:read'),
     write: (text) => ipcRenderer.invoke('clipboard:write', text),
+    copyImageAt: (x, y) => ipcRenderer.invoke('clipboard:copy-image-at', { x, y }),
+    hasImage: () => ipcRenderer.invoke('clipboard:has-image'),
   },
   confirm: (title, message) => ipcRenderer.invoke('dialog:confirm', { title, message }),
 
@@ -36,6 +38,7 @@ contextBridge.exposeInMainWorld('foryou', {
     close: () => ipcRenderer.invoke('win:close'),
     relaunch: () => ipcRenderer.invoke('win:relaunch'),
     onMaximized: (fn) => ipcRenderer.on('win:maximized', (_e, v) => fn(v)),
+    onWindowState: (fn) => ipcRenderer.on('win:state', (_e, v) => fn(v)),
     // 关窗口前主进程会来要一次"存盘"，存完再回话，避免最后一点状态丢掉
     onFlushRequest: (fn) => {
       ipcRenderer.on('app:flush', async () => {

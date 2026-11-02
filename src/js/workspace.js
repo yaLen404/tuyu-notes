@@ -140,6 +140,7 @@ export class Workspace {
       updated: Date.now(),
       graph: graphId,
       links: [],
+      hideBody: true,     // 新建笔记默认折叠（只显示标题条）
     };
     this.notes[note.id] = note;
     this.markDirty(note.id);

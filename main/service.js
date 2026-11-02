@@ -3,7 +3,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { ipcMain, shell, dialog, protocol, app } = require('electron');
+const { ipcMain, shell, dialog, protocol, app, clipboard } = require('electron');
 const { Store } = require('./store');
 const { clampBounds, flushWindow } = require('./window');
 
@@ -131,8 +131,24 @@ function register() {
 
   ipcMain.handle('clipboard:read', () => require('electron').clipboard.readText() || '');
   ipcMain.handle('clipboard:write', (_e, text) => {
-    require('electron').clipboard.writeText(String(text == null ? '' : text));
+    clipboard.writeText(String(text == null ? '' : text));
     return true;
+  });
+  ipcMain.handle('clipboard:copy-image-at', (_e, { x, y }) => {
+    const w = currentWindow();
+    if (!w || !w.webContents) return false;
+    w.webContents.copyImageAt(Math.round(Number(x) || 0), Math.round(Number(y) || 0));
+    return true;
+  });
+  ipcMain.handle('clipboard:has-image', async () => {
+    try {
+      const items = await clipboard.read();
+      if (items.some((item) => item.types && item.types.some((t) => t.startsWith('image/')))) return true;
+    } catch (_e) { /* 回退到格式查询 */ }
+    for (const type of ['image/png', 'image/jpeg', 'image/bmp', 'image/webp', 'image/gif', 'image/tiff']) {
+      if (await clipboard.has(type)) return true;
+    }
+    return false;
   });
 
   ipcMain.handle('dialog:confirm', async (_e, { title, message }) => {

@@ -18,6 +18,8 @@ const scriptArg = argv.find((a) => a.startsWith('--script='));
 const scriptFile = scriptArg ? scriptArg.slice('--script='.length) : null;
 const dataArg = argv.find((a) => a.startsWith('--data-dir='));
 const dataDirArg = dataArg ? dataArg.slice('--data-dir='.length) : null;
+const outArg = argv.find((a) => a.startsWith('--out='));
+const outFile = outArg ? path.resolve(outArg.slice('--out='.length)) : null;
 
 let win = null;
 
@@ -32,7 +34,9 @@ app.whenReady().then(() => {
       await new Promise((r) => setTimeout(r, 800));
       const code = fs.readFileSync(path.resolve(scriptFile), 'utf8');
       const result = await win.webContents.executeJavaScript(code, true);
-      console.log(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+      const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      if (outFile) fs.writeFileSync(outFile, text, 'utf8');
+      else console.log(text);
     } catch (err) {
       console.error('probe failed:', err);
       process.exitCode = 1;

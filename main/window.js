@@ -9,7 +9,7 @@
 const path = require('path');
 const { BrowserWindow, screen, ipcMain } = require('electron');
 
-const MIN_W = 880;
+const MIN_W = 640;
 const MIN_H = 560;
 
 function createWindow(options = {}) {
@@ -52,6 +52,30 @@ function createWindow(options = {}) {
     const area = screen.getDisplayMatching(win.getBounds()).workArea;
     win.setBounds(area);
   });
+
+  // 通知渲染进程：当前窗口是屏幕一半（Windows 贴边）还是全屏 / 最大化
+  let stateTimer = null;
+  const pushWindowState = () => {
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(() => {
+      if (win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) return;
+      const b = win.getBounds();
+      const area = screen.getDisplayMatching(b).workArea;
+      const tol = 8;
+      const fullW = Math.abs(b.width - area.width) <= tol;
+      const fullH = Math.abs(b.height - area.height) <= tol;
+      const full = win.isFullScreen() || (fullW && fullH);
+      const half = !full && (
+        (fullH && Math.abs(b.width - Math.round(area.width / 2)) <= tol)
+        || (fullW && Math.abs(b.height - Math.round(area.height / 2)) <= tol)
+      );
+      win.webContents.send('win:state', { half, full });
+    }, 80);
+  };
+  ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']
+    .forEach((evt) => win.on(evt, pushWindowState));
+  win.webContents.on('did-finish-load', () => setTimeout(pushWindowState, 250));
+  if (show) win.once('ready-to-show', () => setTimeout(pushWindowState, 0));
 
   // 关窗口前先让渲染进程把状态存完（分栏比例、选中项、字号…），
   // 不然刚拖完分栏就点关闭，写入可能还没落盘。
