@@ -2596,6 +2596,31 @@ export class NotePane {
     return hasBlock;
   }
 
+  /** 没有围栏、但明显是缩进代码的纯文本；粘到正文时不要当普通段落 trim。 */
+  looksLikeCodePaste(text) {
+    const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+    const nonblank = lines.filter((l) => l.trim());
+    if (nonblank.length < 2) return false;
+    const indented = nonblank.filter((l) => /^(?: {2,}|\t)\S/.test(l));
+    if (!indented.length) return false;
+    const signals = nonblank.filter((l) => /[{}();=]/.test(l)
+      || /^\s*(?:#include|class|struct|public:|private:|protected:|virtual|void|int|return|if|for|while|def|function|const|let|var|import|package)\b/.test(l));
+    return signals.length >= 2 || (indented.length >= 2 && /[{}]/.test(text));
+  }
+
+  /** 纯代码粘贴：整段收进一个代码块，保留所有行首空格和空行。 */
+  pasteCode(text, index) {
+    const blk = this._blocks[index];
+    if (!blk) return;
+    const block = { type: 'code', src: text, lang: detectLanguage(text) || '' };
+    const replace = !String(blk.inline || '').trim();
+    if (replace) this._blocks.splice(index, 1, block);
+    else this._blocks.splice(index + 1, 0, block);
+    this.writeBack({ forceHistory: true });
+    this.renderBlocks();
+    this.focusBlock(replace ? index : index + 1, 'end');
+  }
+
   /** Markdown-aware 粘贴：保留代码围栏、表格、标题和围栏内部的空行。 */
   pasteMarkdown(text, index) {
     const blk = this._blocks[index];
@@ -2631,6 +2656,11 @@ export class NotePane {
     // 带 Markdown 结构的整段内容：交给 parseBlocks，别按行拆成 p
     if (text.includes('\n') && this.looksLikeMarkdownPaste(text)) {
       this.pasteMarkdown(text, index);
+      return;
+    }
+    // 没有围栏的纯代码：整段建代码块，避免段落 parse 时 trim 掉行首空格
+    if (text.includes('\n') && this.looksLikeCodePaste(text)) {
+      this.pasteCode(text, index);
       return;
     }
     const lines = text.replace(/\r\n?/g, '\n').split('\n');

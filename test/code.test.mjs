@@ -106,6 +106,7 @@ test('自动识别：常见代码语言', () => {
     ['using System;\nclass P { static void Main() { Console.WriteLine("hi"); } }', 'c#'],
     ['#include <stdio.h>\nint main() { printf("hi"); }', 'c'],
     ['#include <iostream>\nint main() { std::cout << "hi"; }', 'c++'],
+    ['class Animal {\npublic:\n    virtual void speak() {}\n};', 'c++'],
     ['name: John\nage: 30', 'yaml'],
     ['name: John\ntype: string', 'yaml'],
     ['#!/bin/bash\necho $HOME', 'shell'],

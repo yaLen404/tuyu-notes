@@ -588,6 +588,11 @@ export function detectLanguage(code) {
     && !/\bfrom\s+['"]/.test(s)) return 'python';
   if (pySignals >= 1 && /\b(None|True|False)\b/.test(s) && /:\s*$/m.test(s)) return 'python';
 
+  // C++ 的 `public:` + 下一行 `void` 很容易被 TS 的 `: void` 类型标注抢走
+  if (/\bstd::|\bcout\b|\bcin\b|#include\s*<iostream>|\bnullptr\b|\btemplate\s*</.test(s)
+    || /\bvirtual\s+[\w:<>,*&\s]+\w+\s*\(/.test(s)
+    || /\bclass\s+\w+[\s\S]*?\b(?:public|private|protected)\s*:/.test(s)) return 'c++';
+
   // YAML 的 key: value 也可能撞上 TS 的 `: string`，先看有没有成片的 key
   const yamlPairs = s.split('\n').filter((line) => /^\s*[A-Za-z0-9_.-]+\s*:\s*\S/.test(line)).length;
   if (yamlPairs >= 2 && !/[{};]/.test(s.replace(/#.*/g, ''))
@@ -648,7 +653,9 @@ export function detectLanguage(code) {
   if (/#import\s*<(Foundation|UIKit)\/|@(interface|implementation|property|end)\b/.test(s)) return 'objective-c';
 
   // C / C++
-  if (/\bstd::|\bcout\b|\bcin\b|#include\s*<iostream>|\bnullptr\b|\btemplate\s*</.test(s)) return 'c++';
+  if (/\bstd::|\bcout\b|\bcin\b|#include\s*<iostream>|\bnullptr\b|\btemplate\s*</.test(s)
+    || /\bvirtual\s+[\w:<>,*&\s]+\w+\s*\(/.test(s)
+    || /\bclass\s+\w+[\s\S]*?\b(?:public|private|protected)\s*:/.test(s)) return 'c++';
   if (/#include\s*[<"]|\bint\s+main\s*\(|\bprintf\s*\(/.test(s)) return 'c';
   if (/\b(const\s+)?(int|char|float|double|long|short|unsigned)\s+\w+\s*[=;]/m.test(s)
     && !/\b(let|var|function)\b/.test(s)) return 'c';

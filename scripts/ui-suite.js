@@ -2990,6 +2990,55 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return 'Markdown 粘贴保留代码围栏、表格';
   });
 
+  await run('粘贴纯代码：保留行首空格，自动建代码块', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(220);
+    const original = note.content;
+    try {
+      f.pane.appendBlock();
+      await wait(250);
+      const ed = activeEditor();
+      if (!ed) fail('没有进入新块');
+      const code = [
+        'class Animal {',
+        'public:',
+        '    int age = 0;',
+        '',
+        '    virtual void speak() { /* 普通动物叫声 */ }',
+        '    virtual void move()  { /* 普通动物移动 */ }',
+        '};',
+        '',
+        'class Dog : public Animal {',
+        'public:',
+        '    void speak() override { /* 汪汪 */ }',
+        '};',
+        '',
+        'void test(Animal* p) {',
+        '    p->speak();',
+        '    p->move();',
+        '}',
+      ].join('\n');
+      const dt = new DataTransfer();
+      dt.setData('text/plain', code);
+      ed.dispatchEvent(new ClipboardEvent('paste', {
+        clipboardData: dt, bubbles: true, cancelable: true,
+      }));
+      await wait(380);
+      const blk = f.pane._blocks.find((b) => b.type === 'code' && b.src.includes('class Animal {'));
+      if (!blk) fail('纯代码粘贴没有建成代码块');
+      if (blk.src !== code) fail('代码块内容和剪贴板不一致（空格被改动）');
+      if (blk.lang !== 'c++') fail('C++ 语言没有识别出来：' + blk.lang);
+      if (!note.content.includes('    int age = 0;')) fail('正文里行首空格丢了');
+      if (!note.content.includes('int age = 0;\n\n    virtual')) fail('代码里的空行丢了');
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return '纯代码 → code 块，空格 / 空行 / C++ 语言都保留';
+  });
+
   await run('代码块：停手后自动识别语言，手动改过的不覆盖', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
