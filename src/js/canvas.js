@@ -988,14 +988,21 @@ export class Canvas {
       return;
     }
     if (d.kind === 'link') {
-      const anchor = this.toScreen(G.anchor(
-        { x: this.records.get(d.src).x, y: this.records.get(d.src).y,
-          w: this.records.get(d.src).w, h: this.records.get(d.src).h }, d.side));
-      this.showPreviewLine(anchor, this.localPoint(e));
+      const srcRec = this.records.get(d.src);
+      const anchor = this.toScreen(G.anchor(srcRec, d.side));
       const over = this.hitCard(e.clientX, e.clientY);
       this.hover = over && over !== d.src ? over : null;
       this.paintHover();
-      this.showTargetPort(this.hover, d.src, e.clientX, e.clientY);
+      const targetRec = this.hover ? this.records.get(this.hover) : null;
+      if (targetRec) {
+        // 悬停在目标卡上时，预览线直接吸附到"面向源卡片"的那条边，
+        // 不再跟着鼠标钻进卡片内部；松手后也用同一条边。
+        const side = G.facingSides(srcRec, targetRec)[1];
+        this.showPreviewLine(anchor, this.toScreen(G.anchor(targetRec, side)));
+      } else {
+        this.showPreviewLine(anchor, this.localPoint(e));
+      }
+      this.showTargetPort(this.hover, d.src);
     }
   }
 

@@ -1936,6 +1936,29 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return seen.join(' ');
   });
 
+  await run('连线目标端接面向源卡的边，不跟松手位置走', async () => {
+    const notes = ws.notesOf();
+    const src = notes[0];
+    const target = notes.find((n) => n.id !== src.id && !ws.outgoingAttr(src).has(n.id));
+    if (!target) fail('没有可用的目标笔记');
+    const a = c.records.get(src.id);
+    const b = c.records.get(target.id);
+    const expected = f.geometry.facingSides(
+      { x: a.x, y: a.y, w: a.w, h: a.h },
+      { x: b.x, y: b.y, w: b.w, h: b.h },
+    )[1];
+    c.hooks.onLinkDrop(src.id, target.id, 'bottom', 'bottom');
+    await wait(220);
+    const pinned = ws.getSides(src.id, target.id);
+    if (!pinned) fail('没有记录接口');
+    if (pinned.to !== expected) fail(`目标边没按朝向：${pinned.to} vs ${expected}`);
+    ws.removeLink(src.id, target.id);
+    ws.clearSides(src.id, target.id);
+    c.render();
+    await wait(120);
+    return `目标端 ${pinned.to}（忽略松手时的 bottom）`;
+  });
+
   await run('从手柄拉线建立属性连接', async () => {
     const notes = ws.notesOf();
     const src = notes[0];

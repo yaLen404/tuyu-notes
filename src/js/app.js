@@ -159,7 +159,8 @@ const canvasHooks = {
     if (existing) return;
     pushUndo();
     ws.addLink(src, dst);
-    // 接口定死：源端用拖出来的那条边；目标端优先用"松手时鼠标靠近的那条边"
+    // 接口定死：源端用拖出来的那条边；目标端用"面向源卡片"的那条边，
+    // 不按松手时鼠标落在卡片的哪一侧（否则从下方松手会连到目标底边）
     const a = canvas.records.get(src);
     const b = canvas.records.get(dst);
     if (a && b) {
@@ -167,8 +168,7 @@ const canvasHooks = {
         { x: a.x, y: a.y, w: a.w, h: a.h },
         { x: b.x, y: b.y, w: b.w, h: b.h },
       );
-      const to = toSide || autoTo;
-      ws.setSides(src, dst, { from: side || from, to });
+      ws.setSides(src, dst, { from: side || from, to: autoTo });
     }
     canvas.render();
     pane.renderMeta();
