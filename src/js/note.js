@@ -2566,6 +2566,52 @@ export class NotePane {
     this._langIndex = -1;
   }
 
+  /** 剪贴板里是否带 Markdown 的块结构；有就走 parseBlocks，别逐行拆段。 */
+  looksLikeMarkdownPaste(text) {
+    const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+    const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+    let fence = 0;
+    let hasBlock = false;
+    for (let i = 0; i < lines.length; i += 1) {
+      const raw = lines[i];
+      const line = raw.trim();
+      if (fence) {
+        const close = /^(`{3,})\s*$/.exec(line);
+        if (close && close[1].length >= fence) fence = 0;
+        continue;
+      }
+      const open = /^(`{3,})([^`]*)$/.exec(line);
+      if (open) {
+        fence = open[1].length;
+        hasBlock = true;
+        continue;
+      }
+      if (/^#{1,6}\s/.test(line)) { hasBlock = true; continue; }
+      if (/^>\s?/.test(line)) { hasBlock = true; continue; }
+      if (/^([-*+]|\d+\.)\s/.test(line)) { hasBlock = true; continue; }
+      if (/^([-*_])(?:\s*\1){2,}\s*$/.test(line)) { hasBlock = true; continue; }
+      if (/^\$\$/.test(line)) { hasBlock = true; continue; }
+      if (line.includes('|') && TABLE_SEP.test(lines[i + 1] || '')) hasBlock = true;
+    }
+    return hasBlock;
+  }
+
+  /** Markdown-aware 粘贴：保留代码围栏、表格、标题和围栏内部的空行。 */
+  pasteMarkdown(text, index) {
+    const blk = this._blocks[index];
+    if (!blk) return;
+    const blocks = parseBlocks(text);
+    while (blocks.length && blocks[0].type === 'empty') blocks.shift();
+    while (blocks.length && blocks[blocks.length - 1].type === 'empty') blocks.pop();
+    if (!blocks.length) return;
+    const replace = !String(blk.inline || '').trim();
+    if (replace) this._blocks.splice(index, 1, ...blocks);
+    else this._blocks.splice(index + 1, 0, ...blocks);
+    this.writeBack({ forceHistory: true });
+    this.renderBlocks();
+    this.focusBlock(replace ? index + blocks.length - 1 : index + blocks.length, 'end');
+  }
+
   onPreviewPaste(e) {
     if (!this.note) return;
     const file = this.imageFileOf(e.clipboardData);
@@ -2581,10 +2627,15 @@ export class NotePane {
     e.preventDefault();
     const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
     if (!text) return;
+    const index = Number(txt.closest('.blk').dataset.i);
+    // 带 Markdown 结构的整段内容：交给 parseBlocks，别按行拆成 p
+    if (text.includes('\n') && this.looksLikeMarkdownPaste(text)) {
+      this.pasteMarkdown(text, index);
+      return;
+    }
     const lines = text.replace(/\r\n?/g, '\n').split('\n');
-    // 多行粘贴 → 自动拆成多个块（和 Notion 一样）
+    // 普通多行文本 → 照旧逐行拆成多个块
     if (lines.length > 1) {
-      const index = Number(txt.closest('.blk').dataset.i);
       const blk = this._blocks[index];
       if (!blk) return;
       const rest = lines.filter((l) => l.trim() !== '');

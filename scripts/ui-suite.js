@@ -2943,6 +2943,53 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     }
   });
 
+  await run('粘贴 Markdown：代码块和表格不被拆坏', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(220);
+    const original = note.content;
+    try {
+      f.pane.appendBlock();
+      await wait(250);
+      const ed = activeEditor();
+      if (!ed) fail('没有进入新块');
+      const md = [
+        '# 粘贴标题',
+        '',
+        '第一段',
+        '',
+        '```cpp',
+        'class A {',
+        'public:',
+        '    int x = 0;',
+        '};',
+        '```',
+        '',
+        '| 列1 | 列2 |',
+        '|---|---|',
+        '| a | b |',
+      ].join('\n');
+      const dt = new DataTransfer();
+      dt.setData('text/plain', md);
+      ed.dispatchEvent(new ClipboardEvent('paste', {
+        clipboardData: dt, bubbles: true, cancelable: true,
+      }));
+      await wait(380);
+      const code = f.pane._blocks.find((b) => b.type === 'code' && b.src.includes('class A {'));
+      if (!code) fail('粘贴后没有代码块');
+      if (/\n\s*\n/.test(code.src)) fail('代码块内部又被插入了空行');
+      if (!f.pane._blocks.some((b) => b.type === 'table')) fail('表格没有被识别');
+      const out = note.content;
+      if (!out.includes('```cpp\nclass A {\npublic:')) fail('代码围栏没有连续保存');
+      if (!out.includes('| 列1 | 列2 |\n|---|---|')) fail('表头 / 分隔行仍被空行拆开');
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return 'Markdown 粘贴保留代码围栏、表格';
+  });
+
   await run('代码块：停手后自动识别语言，手动改过的不覆盖', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
