@@ -658,6 +658,9 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 }
 .node-toolbar .tool-btn svg { width: 13px; height: 13px; }
 
+/* 拖动卡片时先收起工具条，松手后再按新位置出现 */
+.canvas.card-dragging .node-toolbar { display: none !important; }
+
 
 /* 只显示左边 / 右边 */
 .body.view-left .splitter,

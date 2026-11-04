@@ -118,7 +118,7 @@ const canvasHooks = {
     placeToolbar();
   },
   onBeforeChange() { pushUndo(); },
-  onNodeMoved() { updateStatus(); },
+  onNodeMoved() { placeToolbar(); updateStatus(); },
   onResize() { updateStatus(); },
   onView() { placeToolbar(); },
   onZoom() { updateStatus(); },

@@ -2465,6 +2465,31 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '位置正确';
   });
 
+  await run('拖动卡片时暂时隐藏工具条', async () => {
+    const note = ws.notesOf()[1] || ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(180);
+    const card = document.querySelector('.card.selected');
+    if (!card) fail('没有选中的卡片');
+    const bar = document.getElementById('nodeToolbar');
+    if (bar.hidden) fail('拖动前工具条没出现');
+    const [x, y] = center(card);
+    pointer(card, 'pointerdown', x, y);
+    pointer(window, 'pointermove', x + 60, y + 40);
+    await wait(120);
+    if (!document.getElementById('canvas').classList.contains('card-dragging')) {
+      fail('拖动时画布没有进入 card-dragging');
+    }
+    if (getComputedStyle(bar).display !== 'none') fail('拖动时工具条还显示');
+    pointer(window, 'pointerup', x + 60, y + 40);
+    await wait(220);
+    if (document.getElementById('canvas').classList.contains('card-dragging')) {
+      fail('松手后 card-dragging 没清掉');
+    }
+    if (bar.hidden || getComputedStyle(bar).display === 'none') fail('松手后工具条没回来');
+    return '拖动隐藏，松手恢复';
+  });
+
   await run('右键卡片弹出菜单', async () => {
     const card = $('.card');
     const [x, y] = center(card);

@@ -917,6 +917,8 @@ export class Canvas {
       return;
     }
     if (d.kind === 'move') {
+      // 拖动卡片时先把卡片工具条收起来，松手后再按新位置放回去
+      this.root.classList.add('card-dragging');
       const dx = (e.clientX - d.startX) / this.zoom;
       const dy = (e.clientY - d.startY) / this.zoom;
       const rec = this.records.get(d.id);
@@ -1000,6 +1002,7 @@ export class Canvas {
   onPointerUp(e) {
     const d = this._drag;
     this._drag = null;
+    this.root.classList.remove('card-dragging');
     if (d && d.kind === 'link') this.showEdgesAfterConnect();
     this.root.classList.remove('panning');
     this.clearGuides();
