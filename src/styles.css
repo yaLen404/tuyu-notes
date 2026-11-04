@@ -585,6 +585,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   position: fixed; z-index: 200; min-width: 132px; padding: 4px;
   background: var(--card); border: 1px solid var(--line); border-radius: 7px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
+  max-height: calc(100vh - 12px); overflow-y: auto; overscroll-behavior: contain;
 }
 .blk-menu button {
   display: block; width: 100%; text-align: left; padding: 6px 9px;

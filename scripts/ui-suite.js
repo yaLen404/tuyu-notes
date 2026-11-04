@@ -3039,6 +3039,39 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '纯代码 → code 块，空格 / 空行 / C++ 语言都保留';
   });
 
+  await run('底部右键菜单和转为子菜单不出界', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(220);
+    f.pane._sel.clear();
+    f.pane.repaintSelection();
+    f.pane.openBlockContextMenu(0, window.innerWidth - 4, window.innerHeight - 4);
+    await wait(220);
+    const menu = document.querySelector('.blk-menu:not(.sub)');
+    if (!menu) fail('没有弹出右键菜单');
+    const mr = menu.getBoundingClientRect();
+    if (mr.left < 0 || mr.top < 0
+      || mr.right > window.innerWidth + 1 || mr.bottom > window.innerHeight + 1) {
+      fail('右键菜单出界：' + JSON.stringify({ l: mr.left, t: mr.top, r: mr.right, b: mr.bottom,
+        w: innerWidth, h: innerHeight }));
+    }
+    const typeBtn = [...menu.querySelectorAll('button')].find((b) => b.dataset.act === 'type');
+    if (!typeBtn) fail('菜单里没有「转为」');
+    typeBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    await wait(180);
+    const sub = document.querySelector('.blk-menu.sub');
+    if (!sub) fail('没有弹出「转为」子菜单');
+    const sr = sub.getBoundingClientRect();
+    if (sr.left < 0 || sr.top < 0
+      || sr.right > window.innerWidth + 1 || sr.bottom > window.innerHeight + 1) {
+      fail('子菜单出界：' + JSON.stringify({ l: sr.left, t: sr.top, r: sr.right, b: sr.bottom,
+        w: innerWidth, h: innerHeight }));
+    }
+    f.pane.closeBlockMenu();
+    await wait(140);
+    return '菜单 / 子菜单都被夹在视口内';
+  });
+
   await run('代码块：停手后自动识别语言，手动改过的不覆盖', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

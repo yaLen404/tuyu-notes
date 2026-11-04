@@ -1596,6 +1596,47 @@ export class NotePane {
     this.openBlockContextMenu(index, e.clientX, e.clientY, image);
   }
 
+  /** 把 fixed 菜单放进视口；下方放不下就向上翻，右侧放不下就向左翻。 */
+  placeMenu(el, x, y) {
+    const margin = 6;
+    el.style.visibility = 'hidden';
+    el.style.left = `${margin}px`;
+    el.style.top = `${margin}px`;
+    document.body.appendChild(el);
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    let left = x;
+    let top = y;
+    if (left + w > window.innerWidth - margin) left = x - w;
+    if (top + h > window.innerHeight - margin) top = y - h;
+    left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - h - margin));
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.visibility = '';
+  }
+
+  /** 子菜单贴着按钮：优先右侧，放不下换左侧；上下同样夹在视口内。 */
+  placeSubMenu(el, anchor) {
+    const margin = 6;
+    el.style.visibility = 'hidden';
+    el.style.left = `${margin}px`;
+    el.style.top = `${margin}px`;
+    document.body.appendChild(el);
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const a = anchor.getBoundingClientRect();
+    let left = a.right + 2;
+    if (left + w > window.innerWidth - margin) left = a.left - w - 2;
+    let top = a.top - 4;
+    if (top + h > window.innerHeight - margin) top = window.innerHeight - h - margin;
+    left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - h - margin));
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.visibility = '';
+  }
+
   /** 右键菜单：剪切 / 复制 / 粘贴 / 全选 + 转为 ▸ */
   openBlockContextMenu(index, x, y, image = null) {
     this.commitLangIfNeeded();
@@ -1626,9 +1667,7 @@ export class NotePane {
         hasTask ? '<button data-act="check">全部勾选</button>' : '',
         hasTask ? '<button data-act="uncheck">全部取消勾选</button>' : '',
       ].join('');
-      m2.style.left = Math.max(6, Math.min(window.innerWidth - 180, x)) + 'px';
-      m2.style.top = Math.max(6, Math.min(window.innerHeight - 250, y)) + 'px';
-      document.body.appendChild(m2);
+      this.placeMenu(m2, x, y);
       this._menuEl = m2;
       m2.addEventListener('mousedown', (ev) => ev.preventDefault());
       m2.addEventListener('click', (ev) => {
@@ -1667,9 +1706,7 @@ export class NotePane {
       '<button data-act="type" class="has-sub">转为<span class="sub-arrow">▸</span></button>',
       '<button data-act="del">删除这一块</button>',
     ].join('');
-    menu.style.left = Math.max(6, Math.min(window.innerWidth - 160, x)) + 'px';
-    menu.style.top = Math.max(6, Math.min(window.innerHeight - (isCodeBlock ? 280 : 250), y)) + 'px';
-    document.body.appendChild(menu);
+    this.placeMenu(menu, x, y);
     this._menuEl = menu;
 
     menu.addEventListener('mousedown', (ev) => ev.preventDefault());
@@ -1715,9 +1752,7 @@ export class NotePane {
       hasTask ? '<button data-act="check">全部勾选</button>' : '',
       hasTask ? '<button data-act="uncheck">全部取消勾选</button>' : '',
     ].join('');
-    menu.style.left = Math.max(6, Math.min(window.innerWidth - 180, x)) + 'px';
-    menu.style.top = Math.max(6, Math.min(window.innerHeight - 230, y)) + 'px';
-    document.body.appendChild(menu);
+    this.placeMenu(menu, x, y);
     this._menuEl = menu;
     menu.addEventListener('mousedown', (ev) => ev.preventDefault());
     menu.addEventListener('click', (ev) => {
@@ -1751,10 +1786,7 @@ export class NotePane {
     sub.className = 'blk-menu slash sub';
     if (Array.isArray(target) && target.length > 1) sub.dataset.batch = '1';
     sub.innerHTML = items.map(([t, label]) => '<button data-type="' + t + '">' + label + '</button>').join('');
-    const r = anchor.getBoundingClientRect();
-    sub.style.left = Math.max(6, Math.min(window.innerWidth - 170, r.right + 2)) + 'px';
-    sub.style.top = Math.max(6, Math.min(window.innerHeight - 300, r.top - 4)) + 'px';
-    document.body.appendChild(sub);
+    this.placeSubMenu(sub, anchor);
     this._subEl = sub;
     sub.addEventListener('mousedown', (ev) => ev.preventDefault());
     sub.addEventListener('click', (ev) => {
@@ -2720,9 +2752,7 @@ export class NotePane {
       '<button data-act="dup">复制一块</button>',
       '<button data-act="del">删除这一块</button>',
     ].join('');
-    menu.style.left = `${Math.max(6, rect.left - 120)}px`;
-    menu.style.top = `${Math.min(window.innerHeight - 150, rect.top)}px`;
-    document.body.appendChild(menu);
+    this.placeMenu(menu, rect.left - 120, rect.top);
     this._menuEl = menu;
     menu.addEventListener('mousedown', (ev) => ev.preventDefault());
     menu.addEventListener('click', (ev) => {
@@ -2758,9 +2788,7 @@ export class NotePane {
     const menu = document.createElement('div');
     menu.className = 'blk-menu slash';
     menu.innerHTML = items.map(([t, label]) => `<button data-type="${t}">${label}</button>`).join('');
-    menu.style.left = `${Math.max(6, anchorRect.left)}px`;
-    menu.style.top = `${Math.min(window.innerHeight - 280, anchorRect.bottom + 4)}px`;
-    document.body.appendChild(menu);
+    this.placeMenu(menu, anchorRect.left, anchorRect.bottom + 4);
     this._menuEl = menu;
     menu.addEventListener('mousedown', (ev) => ev.preventDefault());
     menu.addEventListener('click', (ev) => {
