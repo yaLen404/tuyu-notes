@@ -305,7 +305,7 @@ export class NotePane {
       + '<div class="code-gutter" aria-hidden="true" contenteditable="false"></div>'
       + '<div class="code-main">'
       + '<pre class="code-hl" aria-hidden="true"><code></code></pre>'
-      + '<textarea class="code-input" wrap="off" spellcheck="false" autocapitalize="off"'
+      + '<textarea class="code-input" rows="1" wrap="off" spellcheck="false" autocapitalize="off"'
       + ' autocomplete="off" autocorrect="off" aria-label="代码"></textarea>'
       + '</div></div>'
       + '<div class="code-foot"><input class="code-lang" type="text" spellcheck="false"'
