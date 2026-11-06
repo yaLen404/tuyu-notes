@@ -554,26 +554,18 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .settings-pane { max-width: none; width: 100%; }
 .settings-pane[hidden], .settings-item[hidden], .settings-nav-item[hidden], .settings-empty[hidden] { display: none; }
 .settings-pane-appearance { max-width: none; }
-.settings-appearance-layout {
-  display: grid; grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 18px; align-items: start;
-}
-.settings-appearance-controls { min-width: 0; }
 .settings-group-title {
   margin: 0 0 7px 2px; color: var(--faint);
   font-size: 11px; letter-spacing: .08em;
 }
-.settings-group-gap { margin-top: 18px; }
-.settings-preview { min-width: 0; position: sticky; top: 0; }
-.settings-preview-title {
-  margin: 0 0 7px 2px; color: var(--faint);
-  font-size: 11px; letter-spacing: .08em;
-}
-.settings-preview-card {
-  padding: 14px; border: 1px solid var(--line-soft);
-  border-radius: 10px; background: var(--panel);
+.settings-group-gap { margin-top: 20px; }
+.settings-preview-block {
+  margin: 0 0 10px; padding: 12px 14px;
+  border: 1px solid var(--line-soft); border-radius: 10px;
+  background: var(--panel);
 }
 .settings-preview-label { color: var(--faint); font-size: 11px; }
+.settings-preview-block .settings-preview-text { margin: 6px 0 0; }
 .settings-preview-text {
   margin: 7px 0 16px; color: var(--text);
   font-size: 16px; line-height: var(--note-line-height, 1.55);
@@ -602,7 +594,6 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   font: inherit; line-height: inherit;
 }
 .settings-preview-code code { padding: 0; background: none; font: inherit; color: inherit; }
-.settings-preview-hint { margin: 9px 2px 0; color: var(--faint); font-size: 11px; }
 .settings-card {
   overflow: hidden; border: 1px solid var(--line-soft);
   border-radius: 10px; background: var(--panel);
@@ -666,8 +657,6 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   .settings-main-head { padding-left: 20px; padding-right: 52px; }
   .settings-scroll { padding-left: 20px; padding-right: 20px; }
   .settings-font-control { flex-basis: 220px; }
-  .settings-appearance-layout { grid-template-columns: 1fr; }
-  .settings-preview { position: static; }
 }
 @media (max-width: 640px) {
   .modal.settings-modal { width: 96vw; }

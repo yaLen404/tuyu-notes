@@ -1336,10 +1336,12 @@ function showSettings() {
             </div>
 
             <div class="settings-pane settings-pane-appearance" data-pane="appearance" hidden>
-              <div class="settings-appearance-layout">
-                <div class="settings-appearance-controls">
-                  <div class="settings-group-title">文本</div>
-                  <div class="settings-card">
+              <div class="settings-group-title">文本</div>
+              <div class="settings-preview-block">
+                <div class="settings-preview-label">文本预览</div>
+                <p class="settings-preview-text">中文排版预览 <span class="latin">English text 123</span> · ① 圈号</p>
+              </div>
+              <div class="settings-card">
                     <div class="settings-item">
                       <span class="settings-ico">${icon('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M5.5 14h5"/>')}</span>
                       <div class="settings-item-main">
@@ -1385,6 +1387,15 @@ function showSettings() {
                   </div>
 
                   <div class="settings-group-title settings-group-gap">代码块</div>
+                  <div class="settings-preview-block">
+                    <div class="settings-preview-label">代码块预览</div>
+                    <div class="settings-preview-code">
+                      <div class="settings-preview-gutter"><span>1</span><span>2</span><span>3</span></div>
+                      <pre><code>function greet(name) {
+  return '你好，' + name;
+}</code></pre>
+                    </div>
+                  </div>
                   <div class="settings-card">
                     <div class="settings-item">
                       <span class="settings-ico">${icon('<path d="m6 4-4 4 4 4M10 4l4 4-4 4"/>')}</span>
@@ -1415,24 +1426,6 @@ function showSettings() {
                       </div>
                     </div>
                   </div>
-                </div>
-
-                <aside class="settings-preview">
-                  <div class="settings-preview-title">预览</div>
-                  <div class="settings-preview-card">
-                    <div class="settings-preview-label">正文</div>
-                    <p class="settings-preview-text">中文排版预览，<span class="latin">English text 123</span>，① 圈号。</p>
-                    <div class="settings-preview-label">代码块</div>
-                    <div class="settings-preview-code">
-                      <div class="settings-preview-gutter"><span>1</span><span>2</span><span>3</span></div>
-                      <pre><code>function greet(name) {
-  return '你好，' + name;
-}</code></pre>
-                    </div>
-                  </div>
-                  <p class="settings-preview-hint">调整左侧数值会实时更新预览</p>
-                </aside>
-              </div>
             </div>
 
             <div class="settings-pane" data-pane="files" hidden>
