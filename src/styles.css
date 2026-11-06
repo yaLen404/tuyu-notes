@@ -500,11 +500,16 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   word-break: break-word;
   caret-color: var(--caret);
   border-radius: 4px;
-  /* 正文横向字距按参考图放松；代码块有单独的 letter-spacing:0 */
+  /* 中文按参考图放松字距；英文用 .latin 归零，代码块另有 letter-spacing:0 */
   letter-spacing: .12em;
   /* 中文与英文 / 数字之间自动留出排版空隙（正文、标题、列表、待办、引用都用 .blk-txt） */
   text-autospace: normal;
 }
+/* 英文 / 数字 / 英文标点不跟中文一起吃额外字距 */
+.blk-txt .latin,
+.blk-txt .wl,
+.blk-txt .tag,
+.blk-txt code { letter-spacing: 0; }
 /* autoSpaceHtml() 加在文字之间的纯展示空隙，不进 markdown 原文 */
 .blk-txt .cjk-gap {
   display: inline-block;

@@ -86,12 +86,23 @@ function autoSpaceHtml(text) {
   const s = String(text == null ? '' : text);
   let out = '';
   let prev = 0;
+  let inLatin = false;
+  const closeLatin = () => {
+    if (inLatin) { out += '</span>'; inLatin = false; }
+  };
   for (const ch of s) {
     const type = CJK_CHAR.test(ch) ? 1 : (ASCII_CHAR.test(ch) ? 2 : 0);
     if (prev && type && prev !== type) out += '<span class="cjk-gap" aria-hidden="true"></span>';
-    out += escapeHtml(ch);
+    if (type === 1) {
+      closeLatin();
+      out += escapeHtml(ch);
+    } else {
+      if (!inLatin) { out += '<span class="latin">'; inLatin = true; }
+      out += escapeHtml(ch);
+    }
     prev = type;
   }
+  closeLatin();
   return out;
 }
 

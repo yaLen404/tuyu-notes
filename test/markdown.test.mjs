@@ -4,6 +4,9 @@ import assert from 'node:assert';
 
 import { render, inline, plainLines, escapeHtml } from '../src/js/markdown.js';
 
+// 英文字距归零用的是展示用 span，不影响 Markdown 语义；断言前先剥掉
+const noLatin = (html) => String(html).replace(/<span class="latin">([\s\S]*?)<\/span>/g, '$1');
+
 test('行内：双链区分存在与缺失', () => {
   const html = inline('看 [[甲]] 和 [[乙]]', (t) => t === '甲');
   assert.match(html, /class="wl" data-title="甲"/);
@@ -22,12 +25,12 @@ test('行内：标签带前导空格不吞字', () => {
 });
 
 test('行内：HTML 被转义', () => {
-  assert.equal(inline('<img src=x>'), '&lt;img src=x&gt;');
+  assert.equal(noLatin(inline('<img src=x>')), '&lt;img src=x&gt;');
   assert.equal(escapeHtml('a&b'), 'a&amp;b');
 });
 
 test('行内：嵌套强调不会把正则搞死（回归）', () => {
-  const html = inline('**粗 *斜* 粗**');
+  const html = noLatin(inline('**粗 *斜* 粗**'));
   assert.match(html, /<strong>粗 <em>斜<\/em> 粗<\/strong>/);
 });
 
@@ -54,8 +57,8 @@ test('公式：有 KaTeX 就渲染，且 $ 里的 * 不当斜体', () => {
 test('行内：下划线强调与反斜杠转义', () => {
   assert.equal(inline('_斜_'), '<em>斜</em>');
   assert.equal(inline('__粗__'), '<strong>粗</strong>');
-  assert.equal(inline('snake_case_name'), 'snake_case_name'); // 不能把变量名吃掉
-  assert.equal(inline('a \\* b'), 'a * b');
+  assert.equal(noLatin(inline('snake_case_name')), 'snake_case_name'); // 不能把变量名吃掉
+  assert.equal(noLatin(inline('a \\* b')), 'a * b');
 });
 
 test('引用：多行用真换行，不能出现字面 <br>', () => {
@@ -72,7 +75,7 @@ test('列表：按缩进排嵌套', () => {
 });
 
 test('表格：对齐标记生效', () => {
-  const html = render('| a | b |\n| :--- | ---: |\n| 1 | 2 |');
+  const html = noLatin(render('| a | b |\n| :--- | ---: |\n| 1 | 2 |'));
   assert.match(html, /<th style="text-align:left">a<\/th>/);
   assert.match(html, /<td style="text-align:right">2<\/td>/);
 });
