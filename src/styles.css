@@ -740,7 +740,8 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
   border-right: 1px solid #242424;
   font-family: Consolas, "Cascadia Mono", "FYN Code CJK", "Courier New", monospace;
   font-size: .9em; line-height: 1.4; tab-size: 2; -moz-tab-size: 2;
-  user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums;
+  user-select: none; -webkit-user-select: none; pointer-events: none;
+  font-variant-numeric: tabular-nums;
 }
 .blk-code .code-main { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .blk-code .code-hl, .blk-code .code-input {

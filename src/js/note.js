@@ -302,7 +302,7 @@ export class NotePane {
   /** 代码块：高亮层垫底 + 透明文字的 textarea 在上，看起来是"直接在代码上打字" */
   codeEditorHtml() {
     return '<div class="code-box">'
-      + '<div class="code-gutter" aria-hidden="true"></div>'
+      + '<div class="code-gutter" aria-hidden="true" contenteditable="false"></div>'
       + '<div class="code-main">'
       + '<pre class="code-hl" aria-hidden="true"><code></code></pre>'
       + '<textarea class="code-input" wrap="off" spellcheck="false" autocapitalize="off"'
