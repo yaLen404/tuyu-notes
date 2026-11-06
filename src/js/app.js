@@ -1224,39 +1224,92 @@ function showSettings() {
   if (document.querySelector('.settings-overlay')) return;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay settings-overlay';
+  const pct = Math.round(pane.scale * 100);
+  const icon = (paths) => `<svg viewBox="0 0 16 16" aria-hidden="true">${paths}</svg>`;
   overlay.innerHTML = `
     <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="设置">
-      <header>设置</header>
-      <div class="modal-body">
-        <div class="settings-row">
-          <span class="settings-label">笔记字号</span>
-          <input class="settings-range" type="range" min="70" max="240" step="5"
-            value="${Math.round(pane.scale * 100)}" aria-label="笔记字号">
-          <span class="settings-value">${Math.round(pane.scale * 100)}%</span>
+      <header class="settings-head">
+        <div>
+          <h2>设置</h2>
+          <p>调整笔记显示、数据位置与维护</p>
         </div>
-        <div class="settings-row">
-          <span class="settings-label">数据</span>
-          <div class="settings-actions">
-            <button class="settings-action" data-act="data">打开数据文件夹</button>
-            <button class="settings-action" data-act="backups">打开备份文件夹</button>
+        <button class="settings-close" type="button" aria-label="关闭设置">×</button>
+      </header>
+      <div class="modal-body settings-body">
+        <section class="settings-section">
+          <div class="settings-section-title">外观</div>
+          <div class="settings-card">
+            <div class="settings-item">
+              <span class="settings-ico">${icon('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M5.5 14h5"/>')}</span>
+              <div class="settings-item-main">
+                <div class="settings-item-title">笔记字号</div>
+                <div class="settings-item-desc">只影响右侧笔记，不改变画布</div>
+              </div>
+              <div class="settings-font-control">
+                <button class="settings-step" type="button" data-step="-1" aria-label="缩小">−</button>
+                <input class="settings-range" type="range" min="70" max="240" step="5"
+                  value="${pct}" aria-label="笔记字号">
+                <button class="settings-step" type="button" data-step="1" aria-label="放大">＋</button>
+                <span class="settings-value">${pct}%</span>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="settings-row">
-          <span class="settings-label">维护</span>
-          <div class="settings-actions">
-            <button class="settings-action" data-act="cleanup">清理没被引用的图片</button>
-            <button class="settings-action" data-act="backup">立即备份一份</button>
+        </section>
+
+        <section class="settings-section">
+          <div class="settings-section-title">数据与存储</div>
+          <div class="settings-card">
+            <div class="settings-item">
+              <span class="settings-ico">${icon('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>')}</span>
+              <div class="settings-item-main">
+                <div class="settings-item-title">数据文件夹</div>
+                <div class="settings-item-desc">笔记 JSON、图片和当前图的状态</div>
+              </div>
+              <button class="settings-link" type="button" data-act="data">打开</button>
+            </div>
+            <div class="settings-item">
+              <span class="settings-ico">${icon('<rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M5 4V2.8h6V4M2 7.5h12M7 9.5h2"/>')}</span>
+              <div class="settings-item-main">
+                <div class="settings-item-title">备份文件夹</div>
+                <div class="settings-item-desc">自动备份和手动快照存放位置</div>
+              </div>
+              <button class="settings-link" type="button" data-act="backups">打开</button>
+            </div>
           </div>
-        </div>
+        </section>
+
+        <section class="settings-section">
+          <div class="settings-section-title">维护</div>
+          <div class="settings-card">
+            <div class="settings-item">
+              <span class="settings-ico">${icon('<path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.6 8.5h4.8l.6-8.5M6.7 7v3.6M9.3 7v3.6"/>')}</span>
+              <div class="settings-item-main">
+                <div class="settings-item-title">清理没被引用的图片</div>
+                <div class="settings-item-desc">删除已经不在任何笔记里的本地图片</div>
+              </div>
+              <button class="settings-link danger" type="button" data-act="cleanup">清理</button>
+            </div>
+            <div class="settings-item">
+              <span class="settings-ico">${icon('<path d="M8 2.5 13 4v4.2c0 2.7-2 4.6-5 5.6-3-1-5-2.9-5-5.6V4z"/><path d="m5.7 7.8 1.5 1.5 3.1-3.1"/>')}</span>
+              <div class="settings-item-main">
+                <div class="settings-item-title">立即备份一份</div>
+                <div class="settings-item-desc">给当前整库创建一次手动快照</div>
+              </div>
+              <button class="settings-link" type="button" data-act="backup">备份</button>
+            </div>
+          </div>
+        </section>
       </div>
-      <footer>
-        <button class="modal-btn primary settings-done">关闭</button>
+      <footer class="settings-foot">
+        <span class="settings-foot-note">所有笔记只保存在这台电脑上</span>
+        <button class="modal-btn primary settings-done" type="button">完成</button>
       </footer>
     </div>`;
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
   overlay.querySelector('.settings-done').onclick = close;
+  overlay.querySelector('.settings-close').onclick = close;
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   overlay.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); close(); }
@@ -1264,13 +1317,18 @@ function showSettings() {
 
   const range = overlay.querySelector('.settings-range');
   const value = overlay.querySelector('.settings-value');
-  range.addEventListener('input', () => {
-    const pct = Number(range.value);
-    pane.setScale(pct / 100);
+  const applyPct = (pct) => {
+    const next = Math.max(70, Math.min(240, pct));
+    range.value = String(next);
+    pane.setScale(next / 100);
     ws.state.zoom = pane.scale;
     value.textContent = Math.round(pane.scale * 100) + '%';
     updateStatus();
     scheduleSave();
+  };
+  range.addEventListener('input', () => applyPct(Number(range.value)));
+  overlay.querySelectorAll('.settings-step').forEach((btn) => {
+    btn.onclick = () => applyPct(Number(range.value) + Number(btn.dataset.step) * 5);
   });
 
   overlay.querySelector('[data-act="data"]').onclick = () => {
