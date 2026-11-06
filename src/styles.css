@@ -478,6 +478,24 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .modal-btn.primary { background: var(--accent); color: #fff; }
 .modal-btn.primary:hover { background: #8b5cf6; }
 
+/* 设置弹窗 */
+.modal.settings-modal { width: min(500px, 90vw); }
+.settings-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid var(--line-soft);
+}
+.settings-row:first-child { padding-top: 2px; }
+.settings-row:last-child { border-bottom: 0; padding-bottom: 2px; }
+.settings-label { flex: 0 0 70px; color: var(--muted); font-size: 12px; }
+.settings-range { flex: 1 1 auto; min-width: 0; accent-color: var(--accent); cursor: pointer; }
+.settings-value { flex: 0 0 46px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings-action {
+  height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--text); font-size: 12px; cursor: pointer;
+}
+.settings-action:hover { background: var(--hover); border-color: #3b3b3b; }
+
 
 /* ── 富文本块（Notion 式）────────────────────────────────────────────
    每段是一个块，块里显示的是排版后的样子；单击就能在里面落光标，

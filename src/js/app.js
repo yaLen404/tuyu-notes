@@ -757,20 +757,6 @@ function menuSpec(name) {
       { label: '收起窗口', action: () => toggleCollapse() },
     ];
   }
-  if (name === 'settings') {
-    return [
-      { label: `笔记字号：${Math.round(pane.scale * 100)}%`, action: () => zoomNote(0) },
-      { label: '笔记字号放大', accel: 'Ctrl+＋', action: () => zoomNote(1.1) },
-      { label: '笔记字号缩小', accel: 'Ctrl+－', action: () => zoomNote(1 / 1.1) },
-      { label: '笔记字号恢复 100%', accel: 'Ctrl+0', action: () => zoomNote(0) },
-      { sep: true },
-      { label: '打开数据文件夹', action: () => api.openFolder('data') },
-      { label: '打开备份文件夹', action: () => api.openFolder('backups') },
-      { sep: true },
-      { label: '清理没被引用的图片…', action: () => cleanupImages() },
-      { label: '立即备份一份', action: () => backupNow() },
-    ];
-  }
   return [
     { label: '使用说明', accel: 'F1', action: () => showHelp() },
     { label: '关于图屿笔记', action: () => showAbout() },
@@ -1234,6 +1220,78 @@ function modal(title, bodyHtml, options = {}) {
 const askText = (title, value) => modal(title, '<p style="color:var(--muted);margin:0 0 8px">新的名字：</p>',
   { input: value });
 
+function showSettings() {
+  if (document.querySelector('.settings-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay settings-overlay';
+  overlay.innerHTML = `
+    <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="设置">
+      <header>设置</header>
+      <div class="modal-body">
+        <div class="settings-row">
+          <span class="settings-label">笔记字号</span>
+          <input class="settings-range" type="range" min="70" max="240" step="5"
+            value="${Math.round(pane.scale * 100)}" aria-label="笔记字号">
+          <span class="settings-value">${Math.round(pane.scale * 100)}%</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">数据</span>
+          <div class="settings-actions">
+            <button class="settings-action" data-act="data">打开数据文件夹</button>
+            <button class="settings-action" data-act="backups">打开备份文件夹</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">维护</span>
+          <div class="settings-actions">
+            <button class="settings-action" data-act="cleanup">清理没被引用的图片</button>
+            <button class="settings-action" data-act="backup">立即备份一份</button>
+          </div>
+        </div>
+      </div>
+      <footer>
+        <button class="modal-btn primary settings-done">关闭</button>
+      </footer>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('.settings-done').onclick = close;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+
+  const range = overlay.querySelector('.settings-range');
+  const value = overlay.querySelector('.settings-value');
+  range.addEventListener('input', () => {
+    const pct = Number(range.value);
+    pane.setScale(pct / 100);
+    ws.state.zoom = pane.scale;
+    value.textContent = Math.round(pane.scale * 100) + '%';
+    updateStatus();
+    scheduleSave();
+  });
+
+  overlay.querySelector('[data-act="data"]').onclick = () => {
+    close();
+    api.openFolder('data');
+  };
+  overlay.querySelector('[data-act="backups"]').onclick = () => {
+    close();
+    api.openFolder('backups');
+  };
+  overlay.querySelector('[data-act="cleanup"]').onclick = () => {
+    close();
+    cleanupImages();
+  };
+  overlay.querySelector('[data-act="backup"]').onclick = () => {
+    close();
+    backupNow();
+  };
+  setTimeout(() => range.focus(), 0);
+}
+
 function showHelp() {
   modal('使用说明', `
     <div class="help">
@@ -1289,6 +1347,11 @@ function bindChrome() {
   dom.menubar.addEventListener('click', (e) => {
     const btn = e.target.closest('.menubar-btn');
     if (!btn) return;
+    if (btn.dataset.menu === 'settings') {
+      closePopover();
+      showSettings();
+      return;
+    }
     const r = btn.getBoundingClientRect();
     openPopover(menuSpec(btn.dataset.menu), r.left, r.bottom + 4);
   });
