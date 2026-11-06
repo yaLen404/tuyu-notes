@@ -76,6 +76,7 @@ async function boot() {
 
   canvas.attach();
   pane.setScale(ws.state.zoom || 1);
+  applyNoteTypography(readNoteTypography());
   viewMode = ['left', 'right', 'both'].includes(ws.state.viewMode) ? ws.state.viewMode : 'both';
   setViewMode(viewMode, { persist: false });
   if (api.win.onWindowState) api.win.onWindowState(applyWindowFit);
@@ -1146,6 +1147,40 @@ function relayout() {
   scheduleSave();
 }
 
+const NOTE_TYPO = {
+  letterSpacing: 0.12,
+  lineHeight: 1.55,
+  minLetterSpacing: 0,
+  maxLetterSpacing: 0.3,
+  minLineHeight: 1.2,
+  maxLineHeight: 2.2,
+};
+
+function readNoteTypography() {
+  const ls = Number(ws.state.letterSpacing);
+  const lh = Number(ws.state.lineHeight);
+  return {
+    letterSpacing: Number.isFinite(ls)
+      ? Math.max(NOTE_TYPO.minLetterSpacing, Math.min(NOTE_TYPO.maxLetterSpacing, ls))
+      : NOTE_TYPO.letterSpacing,
+    lineHeight: Number.isFinite(lh)
+      ? Math.max(NOTE_TYPO.minLineHeight, Math.min(NOTE_TYPO.maxLineHeight, lh))
+      : NOTE_TYPO.lineHeight,
+  };
+}
+
+function applyNoteTypography(typo) {
+  dom.preview.style.setProperty('--note-letter-spacing', `${typo.letterSpacing}em`);
+  dom.preview.style.setProperty('--note-line-height', String(typo.lineHeight));
+}
+
+function saveNoteTypography(typo) {
+  ws.state.letterSpacing = typo.letterSpacing;
+  ws.state.lineHeight = typo.lineHeight;
+  applyNoteTypography(typo);
+  scheduleSave();
+}
+
 function zoomNote(factor) {
   const next = factor === 0 ? 1 : pane.scale * factor;
   pane.setScale(next);
@@ -1225,6 +1260,7 @@ function showSettings() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay settings-overlay';
   const pct = Math.round(pane.scale * 100);
+  const typo = readNoteTypography();
   const icon = (paths) => `<svg viewBox="0 0 16 16" aria-hidden="true">${paths}</svg>`;
   const cats = [
     { id: 'about', label: '关于', icon: '<circle cx="8" cy="8" r="5.6"/><path d="M8 7.2v3.2M8 5.2v.6"/>' },
@@ -1293,6 +1329,34 @@ function showSettings() {
                       value="${pct}" aria-label="笔记字号">
                     <button class="settings-step" type="button" data-step="1" aria-label="放大">＋</button>
                     <span class="settings-value">${pct}%</span>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<path d="M3 12 8 4l5 8M5 9h6"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">中文字间距</div>
+                    <div class="settings-item-desc">只作用于中文；英文、数字保持默认间距</div>
+                  </div>
+                  <div class="settings-number-control">
+                    <button class="settings-step" type="button" data-typo="letterSpacing" data-delta="-0.01" aria-label="减小字间距">−</button>
+                    <input class="settings-number" type="number" min="0" max="0.3" step="0.01"
+                      value="${typo.letterSpacing.toFixed(2)}" data-typo-input="letterSpacing" aria-label="中文字间距">
+                    <span class="settings-unit">em</span>
+                    <button class="settings-step" type="button" data-typo="letterSpacing" data-delta="0.01" aria-label="增大字间距">＋</button>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<path d="M3 4h10M3 8h10M3 12h10"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">正文行高</div>
+                    <div class="settings-item-desc">范围 1.2–2.2，代码块固定 1.4</div>
+                  </div>
+                  <div class="settings-number-control">
+                    <button class="settings-step" type="button" data-typo="lineHeight" data-delta="-0.05" aria-label="减小行高">−</button>
+                    <input class="settings-number" type="number" min="1.2" max="2.2" step="0.05"
+                      value="${typo.lineHeight.toFixed(2)}" data-typo-input="lineHeight" aria-label="正文行高">
+                    <span class="settings-unit"></span>
+                    <button class="settings-step" type="button" data-typo="lineHeight" data-delta="0.05" aria-label="增大行高">＋</button>
                   </div>
                 </div>
               </div>
@@ -1431,8 +1495,42 @@ function showSettings() {
     scheduleSave();
   };
   range.addEventListener('input', () => applyPct(Number(range.value)));
-  overlay.querySelectorAll('.settings-step').forEach((btn) => {
+  overlay.querySelectorAll('.settings-step[data-step]').forEach((btn) => {
     btn.onclick = () => applyPct(Number(range.value) + Number(btn.dataset.step) * 5);
+  });
+
+  const typoInputs = [...overlay.querySelectorAll('[data-typo-input]')];
+  const syncTypoFields = () => {
+    const t = readNoteTypography();
+    typoInputs.forEach((input) => {
+      const v = input.dataset.typoInput === 'letterSpacing' ? t.letterSpacing : t.lineHeight;
+      input.value = Number(v).toFixed(2);
+    });
+  };
+  const applyTypo = (key, value) => {
+    const t = readNoteTypography();
+    if (key === 'letterSpacing') {
+      t.letterSpacing = Math.max(NOTE_TYPO.minLetterSpacing, Math.min(NOTE_TYPO.maxLetterSpacing, value));
+    } else {
+      t.lineHeight = Math.max(NOTE_TYPO.minLineHeight, Math.min(NOTE_TYPO.maxLineHeight, value));
+    }
+    saveNoteTypography(t);
+    syncTypoFields();
+  };
+  typoInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.typoInput;
+      const value = Number(input.value);
+      if (Number.isFinite(value)) applyTypo(key, value);
+      else syncTypoFields();
+    });
+  });
+  overlay.querySelectorAll('.settings-step[data-typo]').forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.dataset.typo;
+      const t = readNoteTypography();
+      applyTypo(key, t[key] + Number(btn.dataset.delta));
+    };
   });
 
   const act = (name, fn) => overlay.querySelectorAll(`[data-act="${name}"]`)

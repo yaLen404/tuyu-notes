@@ -341,7 +341,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .chip span.text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* 预览里的 Markdown */
-.preview { user-select: text; font-size: 16px; line-height: 1.55; color: var(--text); }
+.preview { user-select: text; font-size: 16px; line-height: var(--note-line-height, 1.55); color: var(--text); }
 
 /* 笔记里的图片：界面上只看到图，看不到它存在哪 */
 .note-img {
@@ -573,6 +573,18 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .settings-item-title { font-size: 13px; line-height: 1.45; color: var(--text); }
 .settings-item-desc { margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: var(--faint); }
 .settings-font-control { flex: 0 0 260px; display: flex; align-items: center; gap: 6px; }
+.settings-number-control { flex: 0 0 190px; display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.settings-number {
+  width: 64px; height: 26px; padding: 0 5px; text-align: center;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.settings-number:focus { border-color: var(--accent); outline: 0; }
+.settings-number::-webkit-inner-spin-button,
+.settings-number::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.settings-number { -moz-appearance: textfield; appearance: textfield; }
+.settings-unit { width: 17px; color: var(--faint); font-size: 11px; }
 .settings-range { flex: 1 1 auto; min-width: 70px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 .settings-step {
   flex: 0 0 24px; width: 24px; height: 24px; border-radius: 6px;
@@ -632,8 +644,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   word-break: break-word;
   caret-color: var(--caret);
   border-radius: 4px;
-  /* 中文按参考图放松字距；英文用 .latin 归零，代码块另有 letter-spacing:0 */
-  letter-spacing: .12em;
+  /* 中文字距由设置控制；英文用 .latin 归零，代码块另有 letter-spacing:0 */
+  letter-spacing: var(--note-letter-spacing, .12em);
   /* 中文与英文 / 数字之间自动留出排版空隙（正文、标题、列表、待办、引用都用 .blk-txt） */
   text-autospace: normal;
 }
