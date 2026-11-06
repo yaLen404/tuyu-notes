@@ -500,8 +500,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   word-break: break-word;
   caret-color: var(--caret);
   border-radius: 4px;
-  /* 正文横向字距放松一点；代码块有单独的 letter-spacing:0 */
-  letter-spacing: .04em;
+  /* 正文横向字距按参考图放松；代码块有单独的 letter-spacing:0 */
+  letter-spacing: .12em;
   /* 中文与英文 / 数字之间自动留出排版空隙（正文、标题、列表、待办、引用都用 .blk-txt） */
   text-autospace: normal;
 }
