@@ -78,7 +78,9 @@ function imageHtml(name, alt) {
     `data-img="${escapeHtml(base)}" loading="lazy" draggable="false">`;
 }
 
-const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
+// 圈号（①）、全角标点（，。：「」）、全角字母数字、CJK 兼容区都按中文排版处理，
+// 否则它们会被当成英文包进 .latin，字距归零，看起来贴着后面的汉字。
+const CJK_CHAR = /[\u2460-\u24ff\u2e80-\u2eff\u3000-\u303f\u3040-\u30ff\u31c0-\u31ef\u3200-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua960-\ua97f\uac00-\ud7af\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef]/;
 const ASCII_CHAR = /[A-Za-z0-9]/;
 
 /** 中文与英文 / 数字交界处加一个纯展示用的空隙节点（不进入 markdown 原文）。 */

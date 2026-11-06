@@ -18,6 +18,11 @@ import {
 /** 这些块没有富文本编辑，点开是改源码。代码块单独走"原地编辑"，不在这里。 */
 const SOURCE_BLOCKS = ['math', 'table', 'hr'];
 
+// 圈号、全角标点、全角字母数字、CJK 兼容区都算中文，字距跟汉字一致
+const CJK_RANGES = '\\u2460-\\u24ff\\u2e80-\\u2eff\\u3000-\\u303f\\u3040-\\u30ff\\u31c0-\\u31ef\\u3200-\\u33ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\ua960-\\ua97f\\uac00-\\ud7af\\uf900-\\ufaff\\ufe30-\\ufe4f\\uff00-\\uffef';
+const NON_CJK_ONE = new RegExp(`[^${CJK_RANGES}]`);
+const CJK_SPLIT = () => new RegExp(`([${CJK_RANGES}]+)|([^${CJK_RANGES}]+)`, 'g');
+
 /** 停手多久后自动猜代码语言 */
 const AUTO_LANG_DELAY = 650;
 
@@ -925,7 +930,7 @@ export class NotePane {
   latinFragment(text) {
     const frag = document.createDocumentFragment();
     const s = String(text || '');
-    const re = /([\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)|([^\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)/g;
+    const re = CJK_SPLIT();
     let m = re.exec(s);
     while (m) {
       if (m[1]) frag.appendChild(document.createTextNode(m[1]));
@@ -966,7 +971,7 @@ export class NotePane {
     while (node) {
       const parent = node.parentElement;
       const inProtected = parent && parent.closest('.latin, code, .wl, .tag, .math-inline');
-      if (!inProtected && node.nodeValue && /[^\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(node.nodeValue)) {
+      if (!inProtected && node.nodeValue && NON_CJK_ONE.test(node.nodeValue)) {
         nodes.push(node);
       }
       node = walker.nextNode();

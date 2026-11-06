@@ -7,6 +7,12 @@ import { render, inline, plainLines, escapeHtml } from '../src/js/markdown.js';
 // 英文字距归零用的是展示用 span，不影响 Markdown 语义；断言前先剥掉
 const noLatin = (html) => String(html).replace(/<span class="latin">([\s\S]*?)<\/span>/g, '$1');
 
+test('行内：圈号 / 全角标点按中文处理，不包 .latin', () => {
+  assert.equal(inline('①类'), '①类');
+  assert.equal(inline('类，类'), '类，类');
+  assert.equal(inline('①类').includes('class="latin"'), false);
+});
+
 test('行内：双链区分存在与缺失', () => {
   const html = inline('看 [[甲]] 和 [[乙]]', (t) => t === '甲');
   assert.match(html, /class="wl" data-title="甲"/);
