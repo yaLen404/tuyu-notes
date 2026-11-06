@@ -1150,33 +1150,53 @@ function relayout() {
 const NOTE_TYPO = {
   letterSpacing: 0.12,
   lineHeight: 1.55,
+  codeFontSize: 0.9,
+  codeLineHeight: 1.4,
   minLetterSpacing: 0,
   maxLetterSpacing: 0.3,
   minLineHeight: 1.2,
   maxLineHeight: 2.2,
+  minCodeFontSize: 0.75,
+  maxCodeFontSize: 1.3,
+  minCodeLineHeight: 1.1,
+  maxCodeLineHeight: 2,
 };
 
 function readNoteTypography() {
-  const ls = Number(ws.state.letterSpacing);
-  const lh = Number(ws.state.lineHeight);
+  const num = (v, def, min, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def;
+  };
   return {
-    letterSpacing: Number.isFinite(ls)
-      ? Math.max(NOTE_TYPO.minLetterSpacing, Math.min(NOTE_TYPO.maxLetterSpacing, ls))
-      : NOTE_TYPO.letterSpacing,
-    lineHeight: Number.isFinite(lh)
-      ? Math.max(NOTE_TYPO.minLineHeight, Math.min(NOTE_TYPO.maxLineHeight, lh))
-      : NOTE_TYPO.lineHeight,
+    letterSpacing: num(ws.state.letterSpacing, NOTE_TYPO.letterSpacing,
+      NOTE_TYPO.minLetterSpacing, NOTE_TYPO.maxLetterSpacing),
+    lineHeight: num(ws.state.lineHeight, NOTE_TYPO.lineHeight,
+      NOTE_TYPO.minLineHeight, NOTE_TYPO.maxLineHeight),
+    codeFontSize: num(ws.state.codeFontSize, NOTE_TYPO.codeFontSize,
+      NOTE_TYPO.minCodeFontSize, NOTE_TYPO.maxCodeFontSize),
+    codeLineHeight: num(ws.state.codeLineHeight, NOTE_TYPO.codeLineHeight,
+      NOTE_TYPO.minCodeLineHeight, NOTE_TYPO.maxCodeLineHeight),
   };
 }
 
 function applyNoteTypography(typo) {
-  dom.preview.style.setProperty('--note-letter-spacing', `${typo.letterSpacing}em`);
-  dom.preview.style.setProperty('--note-line-height', String(typo.lineHeight));
+  const vars = {
+    '--note-letter-spacing': `${typo.letterSpacing}em`,
+    '--note-line-height': String(typo.lineHeight),
+    '--code-font-size': `${typo.codeFontSize}em`,
+    '--code-line-height': String(typo.codeLineHeight),
+  };
+  // 挂到根元素上，设置里的预览面板也能同步；preview 自己再写一遍防止旧内联值残留
+  for (const el of [document.documentElement, dom.preview]) {
+    for (const [key, value] of Object.entries(vars)) el.style.setProperty(key, value);
+  }
 }
 
 function saveNoteTypography(typo) {
   ws.state.letterSpacing = typo.letterSpacing;
   ws.state.lineHeight = typo.lineHeight;
+  ws.state.codeFontSize = typo.codeFontSize;
+  ws.state.codeLineHeight = typo.codeLineHeight;
   applyNoteTypography(typo);
   scheduleSave();
 }
@@ -1315,50 +1335,103 @@ function showSettings() {
               </div>
             </div>
 
-            <div class="settings-pane" data-pane="appearance" hidden>
-              <div class="settings-card">
-                <div class="settings-item">
-                  <span class="settings-ico">${icon('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M5.5 14h5"/>')}</span>
-                  <div class="settings-item-main">
-                    <div class="settings-item-title">笔记字号</div>
-                    <div class="settings-item-desc">只影响右侧笔记，不改变画布</div>
+            <div class="settings-pane settings-pane-appearance" data-pane="appearance" hidden>
+              <div class="settings-appearance-layout">
+                <div class="settings-appearance-controls">
+                  <div class="settings-group-title">文本</div>
+                  <div class="settings-card">
+                    <div class="settings-item">
+                      <span class="settings-ico">${icon('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M5.5 14h5"/>')}</span>
+                      <div class="settings-item-main">
+                        <div class="settings-item-title">笔记字号</div>
+                        <div class="settings-item-desc">只影响右侧笔记，画布不变</div>
+                      </div>
+                      <div class="settings-font-control">
+                        <button class="settings-step" type="button" data-step="-1" aria-label="缩小">−</button>
+                        <input class="settings-range" type="range" min="70" max="240" step="5"
+                          value="${pct}" aria-label="笔记字号">
+                        <button class="settings-step" type="button" data-step="1" aria-label="放大">＋</button>
+                        <span class="settings-value">${pct}%</span>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <span class="settings-ico">${icon('<path d="M3 12 8 4l5 8M5 9h6"/>')}</span>
+                      <div class="settings-item-main">
+                        <div class="settings-item-title">中文字间距</div>
+                        <div class="settings-item-desc">只作用于中文；英文、数字保持默认间距</div>
+                      </div>
+                      <div class="settings-number-control">
+                        <button class="settings-step" type="button" data-typo="letterSpacing" data-delta="-0.01" aria-label="减小字间距">−</button>
+                        <input class="settings-number" type="number" min="0" max="0.3" step="0.01"
+                          value="${typo.letterSpacing.toFixed(2)}" data-typo-input="letterSpacing" aria-label="中文字间距">
+                        <span class="settings-unit">em</span>
+                        <button class="settings-step" type="button" data-typo="letterSpacing" data-delta="0.01" aria-label="增大字间距">＋</button>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <span class="settings-ico">${icon('<path d="M3 4h10M3 8h10M3 12h10"/>')}</span>
+                      <div class="settings-item-main">
+                        <div class="settings-item-title">正文行高</div>
+                        <div class="settings-item-desc">范围 1.2–2.2</div>
+                      </div>
+                      <div class="settings-number-control">
+                        <button class="settings-step" type="button" data-typo="lineHeight" data-delta="-0.05" aria-label="减小行高">−</button>
+                        <input class="settings-number" type="number" min="1.2" max="2.2" step="0.05"
+                          value="${typo.lineHeight.toFixed(2)}" data-typo-input="lineHeight" aria-label="正文行高">
+                        <span class="settings-unit"></span>
+                        <button class="settings-step" type="button" data-typo="lineHeight" data-delta="0.05" aria-label="增大行高">＋</button>
+                      </div>
+                    </div>
                   </div>
-                  <div class="settings-font-control">
-                    <button class="settings-step" type="button" data-step="-1" aria-label="缩小">−</button>
-                    <input class="settings-range" type="range" min="70" max="240" step="5"
-                      value="${pct}" aria-label="笔记字号">
-                    <button class="settings-step" type="button" data-step="1" aria-label="放大">＋</button>
-                    <span class="settings-value">${pct}%</span>
+
+                  <div class="settings-group-title settings-group-gap">代码块</div>
+                  <div class="settings-card">
+                    <div class="settings-item">
+                      <span class="settings-ico">${icon('<path d="m6 4-4 4 4 4M10 4l4 4-4 4"/>')}</span>
+                      <div class="settings-item-main">
+                        <div class="settings-item-title">代码块字号</div>
+                        <div class="settings-item-desc">相对于正文字号，代码块和行号一起缩放</div>
+                      </div>
+                      <div class="settings-number-control">
+                        <button class="settings-step" type="button" data-typo="codeFontSize" data-delta="-0.01" aria-label="减小代码字号">−</button>
+                        <input class="settings-number" type="number" min="0.75" max="1.3" step="0.01"
+                          value="${typo.codeFontSize.toFixed(2)}" data-typo-input="codeFontSize" aria-label="代码块字号">
+                        <span class="settings-unit">em</span>
+                        <button class="settings-step" type="button" data-typo="codeFontSize" data-delta="0.01" aria-label="增大代码字号">＋</button>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <span class="settings-ico">${icon('<path d="m6 4-4 4 4 4M10 4l4 4-4 4"/>')}</span>
+                      <div class="settings-item-main">
+                        <div class="settings-item-title">代码块行高</div>
+                        <div class="settings-item-desc">范围 1.1–2.0，和正文行高分开</div>
+                      </div>
+                      <div class="settings-number-control">
+                        <button class="settings-step" type="button" data-typo="codeLineHeight" data-delta="-0.05" aria-label="减小代码行高">−</button>
+                        <input class="settings-number" type="number" min="1.1" max="2.0" step="0.05"
+                          value="${typo.codeLineHeight.toFixed(2)}" data-typo-input="codeLineHeight" aria-label="代码块行高">
+                        <span class="settings-unit"></span>
+                        <button class="settings-step" type="button" data-typo="codeLineHeight" data-delta="0.05" aria-label="增大代码行高">＋</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div class="settings-item">
-                  <span class="settings-ico">${icon('<path d="M3 12 8 4l5 8M5 9h6"/>')}</span>
-                  <div class="settings-item-main">
-                    <div class="settings-item-title">中文字间距</div>
-                    <div class="settings-item-desc">只作用于中文；英文、数字保持默认间距</div>
+
+                <aside class="settings-preview">
+                  <div class="settings-preview-title">预览</div>
+                  <div class="settings-preview-card">
+                    <div class="settings-preview-label">正文</div>
+                    <p class="settings-preview-text">中文排版预览，<span class="latin">English text 123</span>，① 圈号。</p>
+                    <div class="settings-preview-label">代码块</div>
+                    <div class="settings-preview-code">
+                      <div class="settings-preview-gutter"><span>1</span><span>2</span><span>3</span></div>
+                      <pre><code>function greet(name) {
+  return '你好，' + name;
+}</code></pre>
+                    </div>
                   </div>
-                  <div class="settings-number-control">
-                    <button class="settings-step" type="button" data-typo="letterSpacing" data-delta="-0.01" aria-label="减小字间距">−</button>
-                    <input class="settings-number" type="number" min="0" max="0.3" step="0.01"
-                      value="${typo.letterSpacing.toFixed(2)}" data-typo-input="letterSpacing" aria-label="中文字间距">
-                    <span class="settings-unit">em</span>
-                    <button class="settings-step" type="button" data-typo="letterSpacing" data-delta="0.01" aria-label="增大字间距">＋</button>
-                  </div>
-                </div>
-                <div class="settings-item">
-                  <span class="settings-ico">${icon('<path d="M3 4h10M3 8h10M3 12h10"/>')}</span>
-                  <div class="settings-item-main">
-                    <div class="settings-item-title">正文行高</div>
-                    <div class="settings-item-desc">范围 1.2–2.2，代码块固定 1.4</div>
-                  </div>
-                  <div class="settings-number-control">
-                    <button class="settings-step" type="button" data-typo="lineHeight" data-delta="-0.05" aria-label="减小行高">−</button>
-                    <input class="settings-number" type="number" min="1.2" max="2.2" step="0.05"
-                      value="${typo.lineHeight.toFixed(2)}" data-typo-input="lineHeight" aria-label="正文行高">
-                    <span class="settings-unit"></span>
-                    <button class="settings-step" type="button" data-typo="lineHeight" data-delta="0.05" aria-label="增大行高">＋</button>
-                  </div>
-                </div>
+                  <p class="settings-preview-hint">调整左侧数值会实时更新预览</p>
+                </aside>
               </div>
             </div>
 
@@ -1503,17 +1576,21 @@ function showSettings() {
   const syncTypoFields = () => {
     const t = readNoteTypography();
     typoInputs.forEach((input) => {
-      const v = input.dataset.typoInput === 'letterSpacing' ? t.letterSpacing : t.lineHeight;
-      input.value = Number(v).toFixed(2);
+      const key = input.dataset.typoInput;
+      input.value = Number(t[key]).toFixed(2);
     });
+  };
+  const typoBounds = {
+    letterSpacing: [NOTE_TYPO.minLetterSpacing, NOTE_TYPO.maxLetterSpacing],
+    lineHeight: [NOTE_TYPO.minLineHeight, NOTE_TYPO.maxLineHeight],
+    codeFontSize: [NOTE_TYPO.minCodeFontSize, NOTE_TYPO.maxCodeFontSize],
+    codeLineHeight: [NOTE_TYPO.minCodeLineHeight, NOTE_TYPO.maxCodeLineHeight],
   };
   const applyTypo = (key, value) => {
     const t = readNoteTypography();
-    if (key === 'letterSpacing') {
-      t.letterSpacing = Math.max(NOTE_TYPO.minLetterSpacing, Math.min(NOTE_TYPO.maxLetterSpacing, value));
-    } else {
-      t.lineHeight = Math.max(NOTE_TYPO.minLineHeight, Math.min(NOTE_TYPO.maxLineHeight, value));
-    }
+    const bounds = typoBounds[key];
+    if (!bounds || !Number.isFinite(value)) return;
+    t[key] = Math.max(bounds[0], Math.min(bounds[1], value));
     saveNoteTypography(t);
     syncTypoFields();
   };
