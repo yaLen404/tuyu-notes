@@ -772,9 +772,9 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
   caret-color: var(--caret); user-select: text;
 }
 .blk-code .code-input::selection { background: rgba(84, 128, 255, .36); }
-/* 输入法组合期间：把输入框里的候选字显示出来，高亮层先让开 */
-.blk-code.composing .code-hl { visibility: hidden; }
-.blk-code.composing .code-input { color: var(--text); -webkit-text-fill-color: currentColor; }
+/* 输入法组合期间：高亮层继续显示，输入框保持透明，别让整块代码变白 */
+.blk-code.composing .code-hl { visibility: visible; }
+.blk-code.composing .code-input { color: transparent; -webkit-text-fill-color: transparent; }
 .blk-code .code-foot {
   position: absolute; right: 5px; bottom: 3px; z-index: 3;
   display: flex; justify-content: flex-end; margin: 0; padding: 2px;

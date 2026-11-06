@@ -471,14 +471,8 @@ export class NotePane {
     if (!blk || blk.type !== 'code') return;
     blk.src = ta.value.replace(/\r\n?/g, '\n');
     const el = ta.closest('.blk-code');
-    if (el && el.classList.contains('composing')) {
-      // 组合期间只更新行号和高度，别动高亮层
-      this.updateGutter(el, blk.src);
-      this.syncCodeHeight(ta);
-      this.syncCodeScroll(ta, el);
-    } else {
-      this.refreshCode(index);
-    }
+    // 组合期间也刷新高亮层：输入框保持透明，否则整块代码会变成白色
+    this.refreshCode(index);
     this.writeBack();
     if (!el || !el.classList.contains('composing')) this.scheduleAutoLanguage(index);
   }
