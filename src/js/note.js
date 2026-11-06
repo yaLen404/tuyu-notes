@@ -154,7 +154,10 @@ export class NotePane {
     this.closeLangMenu();
     this._langCaret = null;
     this.writeBack();
+    // 换笔记时从顶部开始；同一篇重新 show（比如点同一张卡）保持当前滚动位置。
+    const changed = !this.note || !note || this.note.id !== note.id;
     this.note = note || null;
+    if (changed) this.dom.preview.scrollTop = 0;
     this._focus = null;
     this._lastEdit = 0;
     // 换笔记就换一套撤销历史
