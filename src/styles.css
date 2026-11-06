@@ -831,3 +831,6 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 /* 左下角工具栏里的图标按钮（三横线） */
 .pill-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .pill-btn.active { color: var(--accent); }
+
+/* 拉新线时只藏"原来那一条"，其他连线照常 */
+.edges path.edge.is-hidden { display: none; }

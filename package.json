@@ -1,6 +1,6 @@
 {
   "name": "tuyu-notes",
-  "version": "1.0.2-a",
+  "version": "1.0.2-b",
   "description": "图屿笔记 Tuyu Notes：本地优先的双栏知识图谱笔记",
   "main": "main.js",
   "type": "commonjs",
@@ -47,7 +47,7 @@
       ],
       "icon": "assets/tuyu.ico",
       "executableName": "TuyuNotes",
-      "artifactName": "TuyuNotes-Setup-1.0.2A.${ext}"
+      "artifactName": "TuyuNotes-Setup-1.0.2B.${ext}"
     },
     "nsis": {
       "oneClick": false,

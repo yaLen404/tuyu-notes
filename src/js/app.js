@@ -159,8 +159,7 @@ const canvasHooks = {
     if (existing) return;
     pushUndo();
     ws.addLink(src, dst);
-    // 接口定死：源端用拖出来的那条边；目标端用"面向源卡片"的那条边，
-    // 不按松手时鼠标落在卡片的哪一侧（否则从下方松手会连到目标底边）
+    // 源端 = 拖出来的那条边；目标端 = 四个点里离鼠标最近的那个
     const a = canvas.records.get(src);
     const b = canvas.records.get(dst);
     if (a && b) {
@@ -168,7 +167,8 @@ const canvasHooks = {
         { x: a.x, y: a.y, w: a.w, h: a.h },
         { x: b.x, y: b.y, w: b.w, h: b.h },
       );
-      ws.setSides(src, dst, { from: side || from, to: autoTo });
+      const to = toSide || autoTo;
+      ws.setSides(src, dst, { from: side || from, to });
     }
     canvas.render();
     pane.renderMeta();
@@ -1261,7 +1261,7 @@ function showHelp() {
 function showAbout() {
   modal('关于图屿笔记', `
     <div class="help">
-      <p><strong>图屿笔记 · Tuyu Notes 1.0.2A</strong></p>
+      <p><strong>图屿笔记 · Tuyu Notes 1.0.2B</strong></p>
       <p>一个装在自己电脑上的双栏笔记程序：左栏是知识体系图，右栏是选中笔记的内容。
          笔记、图片、备份都存在本机，<b>不联网也能用</b>，也不会上传任何内容。</p>
       <p>数据放在 %LOCALAPPDATA%\\TuyuNotes\\data：一篇笔记一个 JSON 文件，图片在 data\\image，

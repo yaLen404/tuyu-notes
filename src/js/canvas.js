@@ -391,7 +391,8 @@ export class Canvas {
       const path = G.linkPath(ra, rb, link.shape, sides);
       const sel = this.selectedLink && this.selectedLink.src === src && this.selectedLink.dst === dst;
       const hov = this.hoverLink && this.hoverLink.src === src && this.hoverLink.dst === dst;
-      const cls = ['edge', sel ? 'selected' : '', hov ? 'hover' : ''].filter(Boolean).join(' ');
+      const hideThis = this._hideEdge && this._hideEdge.src === src && this._hideEdge.dst === dst;
+    const cls = ['edge', sel ? 'selected' : '', hov ? 'hover' : '', hideThis ? 'is-hidden' : ''].filter(Boolean).join(' ');
       const width = Math.max(1, Math.min(10, Number(link.width) || 4));
       const arrowSize = Math.max(4, Math.min(40, Number(link.arrowSize) || 14));
       const markerId = link.arrow === 'none' ? ''
@@ -825,7 +826,7 @@ export class Canvas {
       }
       const anchor = G.anchor({ x: rec.x, y: rec.y, w: rec.w, h: rec.h }, side);
       this._drag = { kind: 'link', src: id, side, start: this.toScreen(anchor) };
-      this.hideEdgesForConnect();
+      this.hideEdgeFrom(id, side);
       this.showPreviewLine(this.toScreen(anchor), this.localPoint(e));
       this._capture(e);
       e.preventDefault();
@@ -995,14 +996,15 @@ export class Canvas {
       this.paintHover();
       const targetRec = this.hover ? this.records.get(this.hover) : null;
       if (targetRec) {
-        // 悬停在目标卡上时，预览线直接吸附到"面向源卡片"的那条边，
-        // 不再跟着鼠标钻进卡片内部；松手后也用同一条边。
-        const side = G.facingSides(srcRec, targetRec)[1];
+        // 悬停在目标卡上：预览线吸附到"四个点里离鼠标最近的那个"
+        const side = this.sideAtPoint(targetRec, e.clientX, e.clientY)
+          || G.facingSides(srcRec, targetRec)[1];
         this.showPreviewLine(anchor, this.toScreen(G.anchor(targetRec, side)));
       } else {
         this.showPreviewLine(anchor, this.localPoint(e));
       }
-      this.showTargetPort(this.hover, d.src);
+      this.showTargetPort(this.hover, d.src, e.clientX, e.clientY);
+      return;
     }
   }
 
@@ -1010,7 +1012,7 @@ export class Canvas {
     const d = this._drag;
     this._drag = null;
     this.root.classList.remove('card-dragging');
-    if (d && d.kind === 'link') this.showEdgesAfterConnect();
+    if (d && d.kind === 'link') this.showHiddenEdge();
     this.root.classList.remove('panning');
     this.clearGuides();
     this.hidePreviewLine();
@@ -1197,12 +1199,13 @@ export class Canvas {
     const rt = this.records.get(targetId);
     const rs = this.records.get(srcId);
     // 鼠标在卡片上时，按鼠标最近的边；否则用"面向源卡片"的那条边
-    const side = (cx != null && cy != null)
-      ? this.sideAtPoint(rt, cx, cy)
-      : G.facingSides(
-        { x: rt.x, y: rt.y, w: rt.w, h: rt.h },
-        { x: rs.x, y: rs.y, w: rs.w, h: rs.h },
-      )[0];
+    const autoSide = G.facingSides(
+      { x: rt.x, y: rt.y, w: rt.w, h: rt.h },
+      { x: rs.x, y: rs.y, w: rs.w, h: rs.h },
+    )[0];
+    // 鼠标给出的边优先；鼠标在卡片中间给不出边时，退回"面向源卡片"的那条
+    // 目标端 = 四个点里离鼠标最近的那个（鼠标在卡片中间时退回面向边）
+    const side = (cx != null && cy != null && this.sideAtPoint(rt, cx, cy)) || autoSide;
     // 只显示"离鼠标最近"的那一个落点（跟普通悬停一致），不整排点亮
     for (const el of this.cardsEl.querySelectorAll('.card')) {
       const want = el.dataset.id === targetId;
@@ -1225,7 +1228,11 @@ export class Canvas {
   }
 
   /** 鼠标位置离哪条边最近，就用哪个接口（屏幕坐标） */
-  sideAtPoint(rec, x, y) {
+  sideAtPoint(rec, clientX, clientY) {
+    // 传进来的是 client 坐标，screenRectOf 用的是画布内坐标，先换算
+    const cr = this.canvasRect || this.root.getBoundingClientRect();
+    const x = clientX - cr.left;
+    const y = clientY - cr.top;
     const r = this.screenRectOf(rec.note ? rec.note.id : rec.id) || null;
     const box = r || { x: rec.x, y: rec.y, w: rec.w * this.zoom, h: rec.h * this.zoom };
     const pts = {
@@ -1240,13 +1247,22 @@ export class Canvas {
       const d = Math.hypot(x - px, y - py);
       if (d < bestD) { bestD = d; best = side; }
     }
-    return best;
+    return best;   // 永远是四个点里离鼠标最近的那个
   }
 
   /** 拉新线期间先把已有连线藏起来，只留预览线 */
-  hideEdgesForConnect() {
-    this.edgeLayer.style.opacity = '0';
-    this.edgeHit.style.display = 'none';
+  /** 只隐藏"从这条边引出的那一条旧连线"（拉新线时） */
+  hideEdgeFrom(srcId, side) {
+    const sides = (l) => this.ws.getSides(srcId, l.id) || {};
+    const link = (this.ws.note(srcId)?.links || []).find((l) => (sides(l).from || '') === side);
+    this._hideEdge = link ? { src: srcId, dst: link.id } : null;
+    if (this._hideEdge) this.renderEdges();
+  }
+
+  showHiddenEdge() {
+    if (!this._hideEdge) return;
+    this._hideEdge = null;
+    this.renderEdges();
   }
 
   showEdgesAfterConnect() {

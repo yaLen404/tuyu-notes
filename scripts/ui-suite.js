@@ -846,6 +846,93 @@
     return items.join(' / ');
   });
 
+  await run('长笔记全选删除：不残留、不留下空标题', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      const parts = [];
+      for (let i = 0; i < 24; i += 1) {
+        parts.push((i % 6 === 0 ? '### ' : '') + '第 ' + i + ' 段：' + '内容'.repeat(10));
+      }
+      note.content = parts.join('\n\n');
+      f.pane.renderBlocks();
+      await wait(180);
+      const preview = document.getElementById('preview');
+      const range = document.createRange();
+      range.selectNodeContents(preview);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      await wait(80);
+      preview.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Delete', bubbles: true, cancelable: true,
+      }));
+      await wait(360);
+      if (note.content !== '') fail('全选删除后还残留内容：' + JSON.stringify(note.content.slice(0, 40)));
+      if (f.pane._blocks.length !== 1 || f.pane._blocks[0].type !== 'empty') {
+        fail('全选删除后不是单个空块：' + JSON.stringify(f.pane._blocks.map((b) => b.type)));
+      }
+      if (f.pane._focus !== 0) fail('删除后光标没落到唯一的空块');
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return '全选 24 块后删空，只剩一个空块';
+  });
+
+  await run('跨块删除带粗体的内容，合并位置不跑偏', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '**AAAA**\n\n**BBBB**\n\n**CCCC**';
+      f.pane.renderBlocks();
+      await wait(180);
+      const txts = [...document.querySelectorAll('#preview .blk-txt')];
+      const nodeAt = (txt, offset) => {
+        const w = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
+        let pos = 0;
+        let node = w.nextNode();
+        while (node) {
+          if (offset <= pos + node.nodeValue.length) return { node, off: offset - pos };
+          pos += node.nodeValue.length;
+          node = w.nextNode();
+        }
+        return { node: txt, off: 0 };
+      };
+      const a = nodeAt(txts[0], 2);
+      const b = nodeAt(txts[2], 2);
+      const range = document.createRange();
+      range.setStart(a.node, a.off);
+      range.setEnd(b.node, b.off);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      await wait(100);
+      preview.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Delete', bubbles: true, cancelable: true,
+      }));
+      await wait(300);
+      const first = f.pane._blocks[0];
+      if (!first || first.inline.includes('BBBB')) fail('中间块没删干净：' + (first && first.inline));
+      if (!first.inline.includes('AA') || !first.inline.includes('CC')) {
+        fail('前后缀合并错了：' + first.inline);
+      }
+      if (f.pane._focus !== 0) fail('删除后光标没落在合并块');
+      const cur = window.getSelection().getRangeAt(0);
+      if (cur.startOffset !== 2) fail('光标位置偏移：' + cur.startOffset);
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return '粗体跨块删除后前后缀和光标位置正确';
+  });
+
   await run('跨块选中后按 Delete，删掉的是全部选中内容且不会复活', async () => {
     const note = ws.notesOf().find((n) => (n.content || '').split('\n\n').length >= 5);
     f.selectNote(note.id);
@@ -1936,27 +2023,22 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return seen.join(' ');
   });
 
-  await run('连线目标端接面向源卡的边，不跟松手位置走', async () => {
+  await run('连线目标端用松手时最近的那个点', async () => {
     const notes = ws.notesOf();
     const src = notes[0];
     const target = notes.find((n) => n.id !== src.id && !ws.outgoingAttr(src).has(n.id));
     if (!target) fail('没有可用的目标笔记');
-    const a = c.records.get(src.id);
-    const b = c.records.get(target.id);
-    const expected = f.geometry.facingSides(
-      { x: a.x, y: a.y, w: a.w, h: a.h },
-      { x: b.x, y: b.y, w: b.w, h: b.h },
-    )[1];
-    c.hooks.onLinkDrop(src.id, target.id, 'bottom', 'bottom');
+    c.hooks.onLinkDrop(src.id, target.id, 'bottom', 'right');
     await wait(220);
     const pinned = ws.getSides(src.id, target.id);
     if (!pinned) fail('没有记录接口');
-    if (pinned.to !== expected) fail(`目标边没按朝向：${pinned.to} vs ${expected}`);
+    if (pinned.to !== 'right') fail('目标边没按松手位置：' + pinned.to + ' vs right');
+    if (pinned.from !== 'bottom') fail('源端没按拖出来的边：' + pinned.from);
     ws.removeLink(src.id, target.id);
     ws.clearSides(src.id, target.id);
     c.render();
     await wait(120);
-    return `目标端 ${pinned.to}（忽略松手时的 bottom）`;
+    return '目标端 right（松手在目标右侧）';
   });
 
   await run('从手柄拉线建立属性连接', async () => {
@@ -1966,7 +2048,14 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     for (const n of notes.slice(1)) {
       if (!ws.outgoingAttr(src).has(n.id)) { dst = n; break; }
     }
-    if (!dst) fail('找不到可连的卡片');
+    if (!dst) {
+      // 演示数据里已经全连上了：拆掉一条现成的，腾出一个目标
+      const other = notes.find((n) => n.id !== src.id);
+      if (!other) fail('找不到可连的卡片');
+      ws.removeLink(src.id, other.id);
+      ws.clearSides(src.id, other.id);
+      dst = other;
+    }
     f.selectNote(src.id);
     await wait();
     const dot = document.querySelector('.card.selected .dot[data-side="e"]');
@@ -2649,6 +2738,45 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '原地输入 / 行号 / 语言 / 高亮都正常';
   });
 
+  await run('代码块输入法组合期间不会整块变白', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '```js\nconst a = 1;\n```';
+      f.pane.renderBlocks();
+      await wait(180);
+      f.pane.focusCode(0, 'end');
+      const ta = f.pane.codeInput(0);
+      ta.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      ta.value = 'const a = 1;\n中';
+      ta.dispatchEvent(new InputEvent('input', {
+        bubbles: true, isComposing: true, inputType: 'insertCompositionText', data: '中',
+      }));
+      await wait(160);
+      const blk = ta.closest('.blk-code');
+      const hl = blk.querySelector('.code-hl');
+      if (!blk.classList.contains('composing')) fail('没有进入 composing 状态');
+      if (!hl.textContent.includes('中')) fail('高亮层没有组合文字');
+      if (getComputedStyle(hl).visibility === 'hidden') fail('组合期间高亮层被藏起来了');
+      const fill = getComputedStyle(ta).webkitTextFillColor;
+      if (fill !== 'rgba(0, 0, 0, 0)' && fill !== 'transparent') {
+        fail('组合期间输入框文字被显示成实色：' + fill);
+      }
+      if (!blk.querySelector('.tok-kw')) fail('原有语法颜色没了');
+      ta.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+      await wait(140);
+      if (blk.classList.contains('composing')) fail('组合结束后 composing 没清掉');
+      if (!ws.note(note.id).content.includes('中')) fail('组合文字没写回');
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return '组合期间高亮可见、输入框透明、语法颜色保留';
+  });
+
   await run('代码块按键：回车缩进、Tab 制表、Shift+Tab 退格', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
@@ -2675,6 +2803,48 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
 
     await restoreNoteContent(note, original);
     return 'Enter 缩进 2 空格 / Tab 制表符 / Shift+Tab 退回';
+  });
+
+  await run('空代码块里退格 / 删除直接移除整块', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '前文\n\n```js\n```\n\n后文';
+      f.pane.renderBlocks();
+      await wait(180);
+      if (f.pane._blocks.length !== 3) fail('初始块数不对：' + f.pane._blocks.length);
+      f.pane.focusCode(1, 'start');
+      await wait(100);
+      const ta = f.pane.codeInput(1);
+      if (!ta) fail('没有代码输入框');
+      keyOn(ta, 'Backspace');
+      await wait(280);
+      if (f.pane._blocks.length !== 2) fail('空代码块没被删掉：' + f.pane._blocks.length);
+      if (f.pane._blocks.some((b) => b.type === 'code')) fail('还留着 code 块');
+      if (note.content.includes('```')) fail('源码里还留着围栏');
+
+      note.content = '```\n```';
+      f.pane.renderBlocks();
+      await wait(180);
+      const emptyCode = document.querySelector('.blk-code');
+      if (emptyCode.getBoundingClientRect().height > 50) {
+        fail('空代码块还是多行高：' + emptyCode.getBoundingClientRect().height);
+      }
+      f.pane.focusCode(0, 'start');
+      keyOn(f.pane.codeInput(0), 'Delete');
+      await wait(280);
+      if (f.pane._blocks.length !== 1 || f.pane._blocks[0].type !== 'empty') {
+        fail('唯一空代码块删除后不是单个空块');
+      }
+      if (note.content !== '') fail('源码没有清空：' + JSON.stringify(note.content));
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return '空代码块退格 / Delete → 整块删除';
   });
 
   await run('代码块：↓ 从末行出去、↑ 从首行出去、块首退格不拆围栏', async () => {
@@ -2720,13 +2890,13 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     }
     if (!ws.note(note.id).content.includes('const a = 1;')) fail('离开代码块时把代码弄丢了');
 
-    // 空代码块行首退格：不再响应，代码块保持
-    await setCodeContent('前文\n\n```\n\n```\n\n后文');
+    // 非空代码块行首退格：不拆围栏，代码块保持
+    await setCodeContent('前文\n\n```js\nconst keep = 1;\n```\n\n后文');
     f.pane.focusCode(1, 'start');
     keyOn(codeInputOf(), 'Backspace');
     await wait(140);
     if (!codeBlockOf()) fail('块首退格把代码块拆掉了');
-    if (!ws.note(note.id).content.includes('```')) fail('块首退格把围栏删掉了');
+    if (!ws.note(note.id).content.includes('const keep = 1;')) fail('块首退格把代码删掉了');
     if (f.pane._blocks[1].type !== 'code') fail('块首退格改变了代码块类型');
 
     // 代码块下面那段的开头按退格：文字要接进代码，不能写丢
@@ -3087,6 +3257,30 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '纯代码 → code 块，空格 / 空行 / C++ 语言都保留';
   });
 
+  await run('右栏空白处右键也能弹出块菜单', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(220);
+    note.content = '第一段\n\n第二段\n\n第三段';
+    f.pane.renderBlocks();
+    await wait(160);
+    const body = document.getElementById('noteBody');
+    const last = document.querySelector('#preview > .blk:last-child');
+    const br = body.getBoundingClientRect();
+    const lr = last.getBoundingClientRect();
+    const x = Math.round(br.left + br.width / 2);
+    const y = Math.round(Math.min(br.bottom - 12, lr.bottom + 28));
+    body.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+    }));
+    await wait(220);
+    const menu = document.querySelector('.blk-menu:not(.sub)');
+    if (!menu) fail('右栏空白处右键没有菜单');
+    f.pane.closeBlockMenu();
+    await wait(100);
+    return '点最后一块下方空白也能出菜单';
+  });
+
   await run('底部右键菜单和转为子菜单不出界', async () => {
     const note = ws.notesOf()[0];
     f.selectNote(note.id);
@@ -3118,6 +3312,34 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     f.pane.closeBlockMenu();
     await wait(140);
     return '菜单 / 子菜单都被夹在视口内';
+  });
+
+  await run('代码块行号不可编辑，点行号焦点进代码框', async () => {
+    const note = ws.notesOf()[0];
+    f.selectNote(note.id);
+    await wait(220);
+    const original = note.content;
+    try {
+      note.content = '```js\nconst x = 1;\n```';
+      f.pane.renderBlocks();
+      await wait(200);
+      const gutter = document.querySelector('.blk-code .code-gutter');
+      if (!gutter) fail('没有代码块行号');
+      if (gutter.getAttribute('contenteditable') !== 'false') fail('行号可以被编辑');
+      if (getComputedStyle(gutter).pointerEvents !== 'none') fail('行号还在接收点击');
+      const r = gutter.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (hit && gutter.contains(hit)) fail('行号仍然能被点到');
+      realClick(hit || gutter);
+      await wait(160);
+      const sel = window.getSelection();
+      if (sel.anchorNode && gutter.contains(sel.anchorNode)) fail('光标落进了行号');
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+    return '行号 contenteditable=false，点击只进代码框';
   });
 
   await run('代码块：停手后自动识别语言，手动改过的不覆盖', async () => {
