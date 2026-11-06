@@ -20,6 +20,7 @@ const SOURCE_BLOCKS = ['math', 'table', 'hr'];
 
 // 圈号、全角标点、全角字母数字、CJK 兼容区都算中文，字距跟汉字一致
 const CJK_RANGES = '\\u2460-\\u24ff\\u2e80-\\u2eff\\u3000-\\u303f\\u3040-\\u30ff\\u31c0-\\u31ef\\u3200-\\u33ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\ua960-\\ua97f\\uac00-\\ud7af\\uf900-\\ufaff\\ufe30-\\ufe4f\\uff00-\\uffef';
+const CJK_TEST = new RegExp(`[${CJK_RANGES}]`);
 const NON_CJK_ONE = new RegExp(`[^${CJK_RANGES}]`);
 const CJK_SPLIT = () => new RegExp(`([${CJK_RANGES}]+)|([^${CJK_RANGES}]+)`, 'g');
 
@@ -959,12 +960,10 @@ export class NotePane {
       }
     }
 
-    // 输入法 / 方向键可能把中文插进旧的 .latin 里，先把旧包装拆开重分
-    for (const span of [...txt.querySelectorAll('span.latin')]) {
-      if (!span.isConnected || span.closest('code, .wl, .tag, .math-inline')) continue;
-      span.replaceWith(this.latinFragment(span.textContent || ''));
-    }
-
+    // 只有确实需要重新分包时才动 DOM。普通删字、在纯中文块里打字时
+    // 不能每敲一下都重建文字节点，否则很容易把光标送回块末尾。
+    const latinSpans = [...txt.querySelectorAll('span.latin')];
+    const cjkInsideLatin = latinSpans.some((span) => CJK_TEST.test(span.textContent || ''));
     const walker = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
     const nodes = [];
     let node = walker.nextNode();
@@ -975,6 +974,13 @@ export class NotePane {
         nodes.push(node);
       }
       node = walker.nextNode();
+    }
+    if (!cjkInsideLatin && !nodes.length) return;
+
+    // 输入法 / 方向键可能把中文插进旧的 .latin 里，先把旧包装拆开重分
+    for (const span of latinSpans) {
+      if (!span.isConnected || span.closest('code, .wl, .tag, .math-inline')) continue;
+      span.replaceWith(this.latinFragment(span.textContent || ''));
     }
     for (const n of nodes) n.replaceWith(this.latinFragment(n.nodeValue));
 
