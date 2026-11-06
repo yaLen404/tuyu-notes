@@ -1206,6 +1206,19 @@ export class NotePane {
     this.focusBlock(target, 'end');
   }
 
+  /** 空代码块里按退格 / 删除：直接去掉整个块，别把用户困在空代码框里 */
+  removeEmptyCodeBlock(index) {
+    const blk = this._blocks[index];
+    if (!blk || blk.type !== 'code') return;
+    const hadPrev = index > 0;
+    this._blocks.splice(index, 1);
+    if (!this._blocks.length) this._blocks.push({ type: 'empty', inline: '' });
+    this.writeBack({ forceHistory: true });
+    this.renderBlocks();
+    if (hadPrev) this.focusBlock(index - 1, 'end');
+    else this.focusBlock(0, 'start');
+  }
+
   appendBlock() {
     if (!this.note) return;
     this._blocks.push({ type: 'p', inline: '' });
@@ -2402,8 +2415,15 @@ export class NotePane {
       if (key === 'ArrowUp' && info.first) { e.preventDefault(); this.exitCode(index, -1); return; }
       if (key === 'ArrowDown' && info.last) { e.preventDefault(); this.exitCode(index, 1); return; }
     }
+    if ((key === 'Backspace' || key === 'Delete')
+      && ta.selectionStart === 0 && ta.selectionEnd === 0
+      && !ta.value.trim()) {
+      e.preventDefault();
+      this.removeEmptyCodeBlock(index);
+      return;
+    }
     if (key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
-      // 块首退格不再拆代码围栏：这里直接拦住，保持代码块不变
+      // 非空代码块的块首退格不拆围栏
       e.preventDefault();
     }
   }
