@@ -1262,6 +1262,8 @@ export class NotePane {
   removeEmptyCodeBlock(index) {
     const blk = this._blocks[index];
     if (!blk || blk.type !== 'code') return;
+    const savedScroll = this.dom.preview.scrollTop;
+    const savedAnchor = this.scrollAnchor();
     const hadPrev = index > 0;
     this._blocks.splice(index, 1);
     if (!this._blocks.length) this._blocks.push({ type: 'empty', inline: '' });
@@ -1269,6 +1271,12 @@ export class NotePane {
     this.renderBlocks();
     if (hadPrev) this.focusBlock(index - 1, 'end');
     else this.focusBlock(0, 'start');
+    if (savedAnchor) {
+      let idx = savedAnchor.index;
+      if (idx > index) idx -= 1;
+      else if (idx === index) idx = Math.max(0, index - 1);
+      this.restoreScrollAnchor({ index: idx, top: savedAnchor.top }, savedScroll);
+    }
   }
 
   appendBlock() {
@@ -1669,12 +1677,23 @@ export class NotePane {
   /** 删掉选中的块（一块或多块） */
   deleteSelectedBlocks() {
     if (!this._sel.size) return false;
+    const savedScroll = this.dom.preview.scrollTop;
+    const savedAnchor = this.scrollAnchor();
     const idxs = this.selectedIndexes().reverse();
+    const removedBefore = savedAnchor
+      ? idxs.filter((i) => i < savedAnchor.index).length
+      : 0;
+    const anchorRemoved = savedAnchor ? idxs.includes(savedAnchor.index) : false;
     for (const i of idxs) this._blocks.splice(i, 1);
     if (!this._blocks.length) this._blocks.push({ type: 'empty', inline: '' });
     this._sel.clear();
     this.writeBack();
     this.renderBlocks();
+    if (savedAnchor) {
+      let idx = savedAnchor.index - removedBefore;
+      if (anchorRemoved) idx = Math.min(idx, this._blocks.length - 1);
+      this.restoreScrollAnchor({ index: idx, top: savedAnchor.top }, savedScroll);
+    }
     return true;
   }
 
