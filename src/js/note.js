@@ -561,6 +561,22 @@ export class NotePane {
     return r.toString().length;
   }
 
+  /** 从块内 DOM 区间取 Markdown 前缀 / 后缀，同时返回渲染文字长度 */
+  inlineSlice(txt, node, offset, before) {
+    if (!txt) return { md: '', textLen: 0 };
+    const r = document.createRange();
+    r.selectNodeContents(txt);
+    try {
+      if (before) r.setEnd(node, offset);
+      else r.setStart(node, offset);
+    } catch (_e) {
+      return { md: '', textLen: 0 };
+    }
+    const host = document.createElement('div');
+    host.appendChild(r.cloneContents());
+    return { md: htmlToInline(host.innerHTML), textLen: host.textContent.length };
+  }
+
   /** 把光标放到第 index 块的第 offset 个字符 */
   caretAtOffset(index, offset) {
     const txt = this.editableEl(index);
@@ -602,7 +618,7 @@ export class NotePane {
       if (node === host) {
         const idx = isStart ? 0 : this._blocks.length - 1;
         const blk = this._blocks[idx];
-        return { index: idx, offset: isStart ? 0 : (blk ? blockLen(blk) : 0) };
+        return { index: idx, offset: isStart ? 0 : (blk ? blockTextOf(blk).length : 0) };
       }
       const b = this._blockOf(node);
       if (!b) return { index: isStart ? 0 : this._blocks.length - 1, offset: 0 };
@@ -627,9 +643,27 @@ export class NotePane {
     }
     const target = this._blocks[si];
     if (!target) return false;
-    const headText = blockLen(target, a.offset);
+    // 选区偏移是"渲染后的文字位置"，不能让带 ** / 链接的块直接按 Markdown
+    // 源码长度切；优先从 DOM Range 取前缀 / 后缀，光标也用它计算。
+    let headText = blockLen(target, a.offset);
+    let tailText = '';
+    let caretPos = headText.length;
+    const targetTxt = this.editableEl(si);
     const tailBlk = this._blocks[ei];
-    const tailText = tailBlk ? blockLen(tailBlk, b.offset, true) : '';
+    const tailTxt = this.editableEl(ei);
+    const startInTarget = targetTxt && targetTxt.contains(r.startContainer);
+    const endInTail = tailTxt && tailTxt.contains(r.endContainer);
+    if (startInTarget && !SOURCE_BLOCKS.includes(target.type) && target.type !== 'code') {
+      const slice = this.inlineSlice(targetTxt, r.startContainer, r.startOffset, true);
+      headText = slice.md;
+      caretPos = slice.textLen;
+    }
+    if (tailBlk) {
+      tailText = blockLen(tailBlk, b.offset, true);
+      if (endInTail && !SOURCE_BLOCKS.includes(tailBlk.type) && tailBlk.type !== 'code') {
+        tailText = this.inlineSlice(tailTxt, r.endContainer, r.endOffset, false).md;
+      }
+    }
     if (SOURCE_BLOCKS.includes(target.type) || target.type === 'code') {
       // 选区从代码 / 公式 / 表格开头起：删完这一整块，按普通段落承接剩下的文字
       target.type = 'p';
@@ -637,13 +671,21 @@ export class NotePane {
       delete target.lang;
     }
     target.inline = headText + tailText;
-    if (target.type === 'empty' && target.inline) target.type = 'p';
+    if (!target.inline) {
+      // 整段删空后不能留下空的 "## " / "- " / 引用标记，回到普通空块
+      target.type = 'empty';
+      delete target.done;
+      delete target.num;
+      delete target.depth;
+    } else if (target.type === 'empty') {
+      target.type = 'p';
+    }
     this._blocks.splice(si + 1, Math.max(0, ei - si));
     this.writeBack();
     this.renderBlocks();
     const first = this._blocks[si];
     if (first && first.type === 'code') this.focusCode(si, 'start');
-    else this.caretAtOffset(si, headText.length);
+    else this.caretAtOffset(si, caretPos);
     return true;
   }
 
