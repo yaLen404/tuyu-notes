@@ -1226,93 +1226,197 @@ function showSettings() {
   overlay.className = 'modal-overlay settings-overlay';
   const pct = Math.round(pane.scale * 100);
   const icon = (paths) => `<svg viewBox="0 0 16 16" aria-hidden="true">${paths}</svg>`;
+  const cats = [
+    { id: 'about', label: '关于', icon: '<circle cx="8" cy="8" r="5.6"/><path d="M8 7.2v3.2M8 5.2v.6"/>' },
+    { id: 'appearance', label: '外观', icon: '<path d="M2 3.5h12v9H2zM5.5 14h5"/>' },
+    { id: 'files', label: '文件与链接', icon: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>' },
+    { id: 'maintenance', label: '维护', icon: '<path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.6 8.5h4.8l.6-8.5M6.7 7v3.6M9.3 7v3.6"/>' },
+    { id: 'shortcuts', label: '快捷键', icon: '<rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M4.5 7h.1M7 7h.1M9.5 7h.1M12 7h.1M4.5 9.5h7"/>' },
+  ];
+  const nav = cats.map((c) => `<button class="settings-nav-item" type="button" data-cat="${c.id}">
+    <span class="settings-nav-icon">${icon(c.icon)}</span><span>${c.label}</span>
+  </button>`).join('');
   overlay.innerHTML = `
     <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="设置">
-      <header class="settings-head">
-        <div>
-          <h2>设置</h2>
-          <p>调整笔记显示、数据位置与维护</p>
-        </div>
-        <button class="settings-close" type="button" aria-label="关闭设置">×</button>
-      </header>
-      <div class="modal-body settings-body">
-        <section class="settings-section">
-          <div class="settings-section-title">外观</div>
-          <div class="settings-card">
-            <div class="settings-item">
-              <span class="settings-ico">${icon('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M5.5 14h5"/>')}</span>
-              <div class="settings-item-main">
-                <div class="settings-item-title">笔记字号</div>
-                <div class="settings-item-desc">只影响右侧笔记，不改变画布</div>
-              </div>
-              <div class="settings-font-control">
-                <button class="settings-step" type="button" data-step="-1" aria-label="缩小">−</button>
-                <input class="settings-range" type="range" min="70" max="240" step="5"
-                  value="${pct}" aria-label="笔记字号">
-                <button class="settings-step" type="button" data-step="1" aria-label="放大">＋</button>
-                <span class="settings-value">${pct}%</span>
-              </div>
-            </div>
+      <div class="settings-shell">
+        <aside class="settings-side">
+          <div class="settings-side-head">
+            <div class="settings-title">设置</div>
+            <button class="settings-close" type="button" aria-label="关闭设置">×</button>
           </div>
-        </section>
-
-        <section class="settings-section">
-          <div class="settings-section-title">数据与存储</div>
-          <div class="settings-card">
-            <div class="settings-item">
-              <span class="settings-ico">${icon('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>')}</span>
-              <div class="settings-item-main">
-                <div class="settings-item-title">数据文件夹</div>
-                <div class="settings-item-desc">笔记 JSON、图片和当前图的状态</div>
-              </div>
-              <button class="settings-link" type="button" data-act="data">打开</button>
-            </div>
-            <div class="settings-item">
-              <span class="settings-ico">${icon('<rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M5 4V2.8h6V4M2 7.5h12M7 9.5h2"/>')}</span>
-              <div class="settings-item-main">
-                <div class="settings-item-title">备份文件夹</div>
-                <div class="settings-item-desc">自动备份和手动快照存放位置</div>
-              </div>
-              <button class="settings-link" type="button" data-act="backups">打开</button>
-            </div>
+          <div class="settings-search">
+            ${icon('<circle cx="7.2" cy="7.2" r="4.2"/><path d="m10.4 10.4 3 3"/>')}
+            <input class="settings-search-input" type="search" placeholder="搜索设置…"
+              autocomplete="off" spellcheck="false" aria-label="搜索设置">
           </div>
-        </section>
+          <div class="settings-nav-label">选项</div>
+          <nav class="settings-nav">${nav}</nav>
+        </aside>
 
-        <section class="settings-section">
-          <div class="settings-section-title">维护</div>
-          <div class="settings-card">
-            <div class="settings-item">
-              <span class="settings-ico">${icon('<path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.6 8.5h4.8l.6-8.5M6.7 7v3.6M9.3 7v3.6"/>')}</span>
-              <div class="settings-item-main">
-                <div class="settings-item-title">清理没被引用的图片</div>
-                <div class="settings-item-desc">删除已经不在任何笔记里的本地图片</div>
+        <section class="settings-main">
+          <header class="settings-main-head">
+            <h2 class="settings-cat-title">外观</h2>
+            <p class="settings-cat-desc">调整笔记的阅读体验</p>
+          </header>
+          <div class="settings-scroll">
+            <div class="settings-pane" data-pane="about" hidden>
+              <div class="settings-card">
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<circle cx="8" cy="8" r="5.6"/><path d="M8 7.2v3.2M8 5.2v.6"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">版本 1.0.2B</div>
+                    <div class="settings-item-desc">图屿笔记 · 本地优先的双栏知识图谱笔记</div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">本地数据</div>
+                    <div class="settings-item-desc">所有笔记、图片和备份都只保存在这台电脑上</div>
+                  </div>
+                  <button class="settings-link" type="button" data-act="data">打开数据文件夹</button>
+                </div>
               </div>
-              <button class="settings-link danger" type="button" data-act="cleanup">清理</button>
             </div>
-            <div class="settings-item">
-              <span class="settings-ico">${icon('<path d="M8 2.5 13 4v4.2c0 2.7-2 4.6-5 5.6-3-1-5-2.9-5-5.6V4z"/><path d="m5.7 7.8 1.5 1.5 3.1-3.1"/>')}</span>
-              <div class="settings-item-main">
-                <div class="settings-item-title">立即备份一份</div>
-                <div class="settings-item-desc">给当前整库创建一次手动快照</div>
+
+            <div class="settings-pane" data-pane="appearance" hidden>
+              <div class="settings-card">
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M5.5 14h5"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">笔记字号</div>
+                    <div class="settings-item-desc">只影响右侧笔记，不改变画布</div>
+                  </div>
+                  <div class="settings-font-control">
+                    <button class="settings-step" type="button" data-step="-1" aria-label="缩小">−</button>
+                    <input class="settings-range" type="range" min="70" max="240" step="5"
+                      value="${pct}" aria-label="笔记字号">
+                    <button class="settings-step" type="button" data-step="1" aria-label="放大">＋</button>
+                    <span class="settings-value">${pct}%</span>
+                  </div>
+                </div>
               </div>
-              <button class="settings-link" type="button" data-act="backup">备份</button>
             </div>
+
+            <div class="settings-pane" data-pane="files" hidden>
+              <div class="settings-card">
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">数据文件夹</div>
+                    <div class="settings-item-desc">笔记 JSON、图片和当前图的状态</div>
+                  </div>
+                  <button class="settings-link" type="button" data-act="data">打开</button>
+                </div>
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M5 4V2.8h6V4M2 7.5h12M7 9.5h2"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">备份文件夹</div>
+                    <div class="settings-item-desc">自动备份和手动快照存放位置</div>
+                  </div>
+                  <button class="settings-link" type="button" data-act="backups">打开</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-pane" data-pane="maintenance" hidden>
+              <div class="settings-card">
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.6 8.5h4.8l.6-8.5M6.7 7v3.6M9.3 7v3.6"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">清理没被引用的图片</div>
+                    <div class="settings-item-desc">删除已经不在任何笔记里的本地图片</div>
+                  </div>
+                  <button class="settings-link danger" type="button" data-act="cleanup">清理</button>
+                </div>
+                <div class="settings-item">
+                  <span class="settings-ico">${icon('<path d="M8 2.5 13 4v4.2c0 2.7-2 4.6-5 5.6-3-1-5-2.9-5-5.6V4z"/><path d="m5.7 7.8 1.5 1.5 3.1-3.1"/>')}</span>
+                  <div class="settings-item-main">
+                    <div class="settings-item-title">立即备份一份</div>
+                    <div class="settings-item-desc">给当前整库创建一次手动快照</div>
+                  </div>
+                  <button class="settings-link" type="button" data-act="backup">备份</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-pane" data-pane="shortcuts" hidden>
+              <div class="settings-card">
+                <div class="settings-item"><div class="settings-item-main"><div class="settings-item-title">新建笔记</div></div><kbd>Ctrl+N</kbd></div>
+                <div class="settings-item"><div class="settings-item-main"><div class="settings-item-title">新建图</div></div><kbd>Ctrl+Shift+N</kbd></div>
+                <div class="settings-item"><div class="settings-item-main"><div class="settings-item-title">保存</div></div><kbd>Ctrl+S</kbd></div>
+                <div class="settings-item"><div class="settings-item-main"><div class="settings-item-title">撤销 / 重做</div></div><kbd>Ctrl+Z / Ctrl+Y</kbd></div>
+                <div class="settings-item"><div class="settings-item-main"><div class="settings-item-title">笔记字号</div></div><kbd>Ctrl+滚轮 / Ctrl+0</kbd></div>
+                <div class="settings-item"><div class="settings-item-main"><div class="settings-item-title">使用说明</div></div><kbd>F1</kbd></div>
+              </div>
+            </div>
+            <div class="settings-empty" hidden>没有找到匹配的设置</div>
           </div>
         </section>
       </div>
-      <footer class="settings-foot">
-        <span class="settings-foot-note">所有笔记只保存在这台电脑上</span>
-        <button class="modal-btn primary settings-done" type="button">完成</button>
-      </footer>
     </div>`;
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
-  overlay.querySelector('.settings-done').onclick = close;
   overlay.querySelector('.settings-close').onclick = close;
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   overlay.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+
+  const titleEl = overlay.querySelector('.settings-cat-title');
+  const descEl = overlay.querySelector('.settings-cat-desc');
+  const panes = [...overlay.querySelectorAll('.settings-pane')];
+  const navItems = [...overlay.querySelectorAll('.settings-nav-item')];
+  const meta = {
+    about: ['关于', '版本、数据位置与项目信息'],
+    appearance: ['外观', '调整笔记的阅读体验'],
+    files: ['文件与链接', '管理笔记、图片和备份的存放位置'],
+    maintenance: ['维护', '清理与备份本地数据'],
+    shortcuts: ['快捷键', '常用操作的键盘入口'],
+  };
+  let activeCat = 'appearance';
+  const activate = (id) => {
+    if (!meta[id]) return;
+    activeCat = id;
+    navItems.forEach((b) => b.classList.toggle('active', b.dataset.cat === id));
+    panes.forEach((p) => { p.hidden = p.dataset.pane !== id; });
+    titleEl.textContent = meta[id][0];
+    descEl.textContent = meta[id][1];
+  };
+  navItems.forEach((b) => { b.onclick = () => activate(b.dataset.cat); });
+
+  const search = overlay.querySelector('.settings-search-input');
+  const empty = overlay.querySelector('.settings-empty');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      panes.forEach((p) => { p.hidden = true; p.querySelectorAll('.settings-item').forEach((r) => { r.hidden = false; }); });
+      navItems.forEach((b) => { b.hidden = false; });
+      empty.hidden = true;
+      activate(activeCat);
+      return;
+    }
+    let first = null;
+    panes.forEach((p) => {
+      let hit = false;
+      p.querySelectorAll('.settings-item').forEach((row) => {
+        const yes = row.textContent.toLowerCase().includes(q);
+        row.hidden = !yes;
+        if (yes) hit = true;
+      });
+      p.hidden = !hit;
+      const nav = navItems.find((b) => b.dataset.cat === p.dataset.pane);
+      if (nav) nav.hidden = !hit;
+      if (hit && !first) first = p.dataset.pane;
+    });
+    empty.hidden = Boolean(first);
+    if (first) {
+      panes.forEach((p) => { p.hidden = p.dataset.pane !== first; });
+      navItems.forEach((b) => b.classList.toggle('active', b.dataset.cat === first));
+      titleEl.textContent = meta[first][0];
+      descEl.textContent = meta[first][1];
+    }
   });
 
   const range = overlay.querySelector('.settings-range');
@@ -1331,23 +1435,14 @@ function showSettings() {
     btn.onclick = () => applyPct(Number(range.value) + Number(btn.dataset.step) * 5);
   });
 
-  overlay.querySelector('[data-act="data"]').onclick = () => {
-    close();
-    api.openFolder('data');
-  };
-  overlay.querySelector('[data-act="backups"]').onclick = () => {
-    close();
-    api.openFolder('backups');
-  };
-  overlay.querySelector('[data-act="cleanup"]').onclick = () => {
-    close();
-    cleanupImages();
-  };
-  overlay.querySelector('[data-act="backup"]').onclick = () => {
-    close();
-    backupNow();
-  };
-  setTimeout(() => range.focus(), 0);
+  const act = (name, fn) => overlay.querySelectorAll(`[data-act="${name}"]`)
+    .forEach((btn) => { btn.onclick = () => { close(); fn(); }; });
+  act('data', () => api.openFolder('data'));
+  act('backups', () => api.openFolder('backups'));
+  act('cleanup', () => cleanupImages());
+  act('backup', () => backupNow());
+  activate('appearance');
+  setTimeout(() => search.focus(), 0);
 }
 
 function showHelp() {
