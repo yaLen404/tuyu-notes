@@ -217,6 +217,9 @@ export class NotePane {
       }
       : null;
     const scrollTop = this.dom.preview.scrollTop;
+    // 重排会让前面的块变高 / 变矮；只记住 scrollTop 会把下面的内容整体推走。
+    // 记住“当前视口最上面那一块”及其位置，重排后把它放回原处。
+    const anchor = this.scrollAnchor();
     this._blocks = blocks;
     this.renumber();
     const editable = true;
@@ -225,7 +228,7 @@ export class NotePane {
     this.syncScale();
     this.initCodeEditors();
     this.markTopHeading();
-    this.dom.preview.scrollTop = scrollTop;
+    this.restoreScrollAnchor(anchor, scrollTop);
     if (keep && this._blocks[keep.index] && this._blocks[keep.index].type === 'code') {
       const ta = this.codeInput(keep.index);
       if (ta) {
@@ -235,6 +238,35 @@ export class NotePane {
         this.syncCodeScroll(ta);
       }
     }
+  }
+
+  /** 记录当前视口顶部命中的块，重排后用它把上下位置钉住 */
+  scrollAnchor() {
+    const box = this.dom.preview.getBoundingClientRect();
+    for (const el of this.dom.preview.querySelectorAll(':scope > .blk')) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > box.top + 1 && r.top < box.bottom - 1) {
+        return { index: Number(el.dataset.i), top: r.top - box.top };
+      }
+    }
+    return null;
+  }
+
+  /** 尽量让重排前视口最上面的那一块回到原来的屏幕位置 */
+  restoreScrollAnchor(anchor, fallback) {
+    if (!anchor) {
+      this.dom.preview.scrollTop = fallback;
+      return;
+    }
+    const els = [...this.dom.preview.querySelectorAll(':scope > .blk')];
+    const el = els[Math.min(anchor.index, els.length - 1)];
+    if (!el) {
+      this.dom.preview.scrollTop = fallback;
+      return;
+    }
+    const box = this.dom.preview.getBoundingClientRect();
+    const delta = (el.getBoundingClientRect().top - box.top) - anchor.top;
+    this.dom.preview.scrollTop += delta;
   }
 
   /** 找出第一个有内容的块；如果它是标题，就把前面的空块收掉、标题贴顶 */
@@ -653,6 +685,9 @@ export class NotePane {
     }
     const target = this._blocks[si];
     if (!target) return false;
+    const savedScroll = this.dom.preview.scrollTop;
+    const savedAnchor = this.scrollAnchor();
+    const removed = Math.max(0, ei - si);
     // 选区偏移是"渲染后的文字位置"，不能让带 ** / 链接的块直接按 Markdown
     // 源码长度切；优先从 DOM Range 取前缀 / 后缀，光标也用它计算。
     let headText = blockLen(target, a.offset);
@@ -696,6 +731,13 @@ export class NotePane {
     const first = this._blocks[si];
     if (first && first.type === 'code') this.focusCode(si, 'start');
     else this.caretAtOffset(si, caretPos);
+    // 光标可能在视口外；用户删完后应继续看原来的位置，而不是被光标带回删除点
+    if (savedAnchor) {
+      let idx = savedAnchor.index;
+      if (idx > ei) idx -= removed;
+      else if (idx > si) idx = si + 1;
+      this.restoreScrollAnchor({ index: idx, top: savedAnchor.top }, savedScroll);
+    }
     return true;
   }
 
