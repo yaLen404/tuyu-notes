@@ -69,7 +69,8 @@ export class NotePane {
     dom.preview.addEventListener('focusout', (e) => this.onPreviewFocusOut(e));
     dom.preview.addEventListener('input', (e) => this.onPreviewInput(e));
     dom.preview.addEventListener('keydown', (e) => this.onPreviewKey(e));
-    dom.preview.addEventListener('contextmenu', (e) => this.onPreviewContextMenu(e));
+    // 整个右栏都接右键：点正文块、块之间空隙、最后一块下方空白都能出菜单
+    dom.root.addEventListener('contextmenu', (e) => this.onPreviewContextMenu(e));
     dom.preview.addEventListener('paste', (e) => this.onPreviewPaste(e));
     dom.preview.addEventListener('dragover', (e) => this.onPreviewDragOver(e));
     dom.preview.addEventListener('drop', (e) => this.onPreviewDrop(e));
@@ -515,6 +516,18 @@ export class NotePane {
       if (y >= r.top && y <= r.bottom) return el;
     }
     return null;
+  }
+
+  /** 找离纵坐标最近的一块（点块间空隙 / 下方空白时兜底） */
+  blockNearY(y) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const el of this.dom.preview.querySelectorAll(':scope > .blk')) {
+      const r = el.getBoundingClientRect();
+      const d = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+      if (d < bestDist) { best = el; bestDist = d; }
+    }
+    return best;
   }
 
   /** 点在块的左右留白：按点击的纵坐标把光标放到那一行，而不是跳到全文最后 */
@@ -1635,7 +1648,15 @@ export class NotePane {
   /** 右键正文里的某一段 → 文本编辑菜单（里面再嵌「转为」块类型子菜单） */
   onPreviewContextMenu(e) {
     if (e.target.closest && e.target.closest('.code-lang')) return;   // 语言框交回系统
-    const blk = e.target.closest && e.target.closest('.blk');
+    if (e.target.closest && e.target.closest('.note-head, .empty-hint')) return;
+    let blk = e.target.closest && e.target.closest('.blk');
+    // 点在块间空隙 / 最后一块下方空白 / 右栏空白：取最近的块，
+    // 别因为没命中 .blk 就什么都不弹。
+    if (!blk) blk = this.blockAtY(e.clientY) || this.blockNearY(e.clientY);
+    if (!blk && this.note && this._blocks.length) {
+      const idx = this._focus == null ? this._blocks.length - 1 : this._focus;
+      blk = this.blkEl(Math.max(0, Math.min(idx, this._blocks.length - 1)));
+    }
     if (!blk) return;
     e.preventDefault();
     const index = Number(blk.dataset.i);
