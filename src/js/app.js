@@ -1274,11 +1274,11 @@ function showSettings() {
   </button>`).join('');
   overlay.innerHTML = `
     <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="设置">
+      <button class="settings-close" type="button" aria-label="关闭设置">×</button>
       <div class="settings-shell">
         <aside class="settings-side">
           <div class="settings-side-head">
             <div class="settings-title">设置</div>
-            <button class="settings-close" type="button" aria-label="关闭设置">×</button>
           </div>
           <div class="settings-search">
             ${icon('<circle cx="7.2" cy="7.2" r="4.2"/><path d="m10.4 10.4 3 3"/>')}

@@ -480,6 +480,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 
 /* 设置弹窗：左侧分类，右侧内容 */
 .modal.settings-modal {
+  position: relative;
   width: min(1080px, 94vw); height: min(760px, 88vh); max-height: 88vh;
   border-radius: 12px; animation: settings-in .16s ease-out;
 }
@@ -498,7 +499,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 }
 .settings-title { font-size: 16px; font-weight: 600; line-height: 1.3; }
 .settings-close {
-  width: 26px; height: 26px; border-radius: 6px;
+  position: absolute; top: 12px; right: 14px; z-index: 3;
+  width: 28px; height: 28px; border-radius: 6px;
   color: var(--faint); font-size: 18px; line-height: 1;
 }
 .settings-close:hover { background: var(--hover); color: var(--text); }
@@ -543,7 +545,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   background: var(--card);
 }
 .settings-main-head {
-  flex: 0 0 auto; padding: 22px 30px 14px;
+  flex: 0 0 auto; padding: 22px 58px 14px 30px;
   border-bottom: 1px solid var(--line-soft);
 }
 .settings-main-head h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.3; }
@@ -611,7 +613,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .settings-empty { padding: 30px 2px; color: var(--faint); font-size: 12.5px; }
 @media (max-width: 760px) {
   .settings-side { flex-basis: 200px; width: 200px; }
-  .settings-main-head, .settings-scroll { padding-left: 20px; padding-right: 20px; }
+  .settings-main-head { padding-left: 20px; padding-right: 52px; }
+  .settings-scroll { padding-left: 20px; padding-right: 20px; }
   .settings-font-control { flex-basis: 220px; }
 }
 @media (max-width: 640px) {
