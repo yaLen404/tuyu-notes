@@ -1251,12 +1251,11 @@ export class Canvas {
   }
 
   /** 拉新线期间先把已有连线藏起来，只留预览线 */
-  /** 只隐藏"从这条边引出的那一条旧连线"（拉新线时） */
-  hideEdgeFrom(srcId, side) {
-    const sides = (l) => this.ws.getSides(srcId, l.id) || {};
-    const link = (this.ws.note(srcId)?.links || []).find((l) => (sides(l).from || '') === side);
-    this._hideEdge = link ? { src: srcId, dst: link.id } : null;
-    if (this._hideEdge) this.renderEdges();
+  /** 拉新线时：只有"当前被选中的那条线"会被暂时藏起来；没选中就一条都不藏 */
+  hideEdgeFrom() {
+    const sel = this.selectedLink;
+    this._hideEdge = sel ? { src: sel.src, dst: sel.dst } : null;
+    this.renderEdges();
   }
 
   showHiddenEdge() {

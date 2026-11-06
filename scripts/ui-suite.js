@@ -6,6 +6,12 @@
   const c = f.canvas;
   const G = f.geometry;
   const $ = (s) => document.querySelector(s);
+  /** 取块里的第一个文字节点，避开字距包装 span 的节点长度限制 */
+  const textPoint = (el) => {
+    if (!el) return el;
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    return w.nextNode() || el;
+  };
   const canvasEl = document.getElementById('canvas');
   const preview = document.getElementById('preview');
   // 富文本块编辑：正文切成 .blk，编辑中的块里是 contenteditable 的 .blk-txt
@@ -307,6 +313,92 @@
     await wait(180);
     if (ws.notesOf().length !== before) fail('点「立即保存」却新建了笔记 —— 菜单派发跑到第一项去了');
     return '点哪项执行哪项';
+  });
+
+  await run('菜单栏在视图和帮助之间有设置', async () => {
+    const labels = [...document.querySelectorAll('.menubar-btn')].map((b) => b.textContent.trim());
+    const vi = labels.indexOf('视图');
+    const si = labels.indexOf('设置');
+    const hi = labels.indexOf('帮助');
+    if (!(vi >= 0 && si === vi + 1 && hi === si + 1)) {
+      fail('菜单顺序不对：' + labels.join(' / '));
+    }
+    const oldScale = f.pane.scale;
+    document.querySelector('.menubar-btn[data-menu="settings"]').click();
+    await wait(180);
+    const modal = document.querySelector('.settings-overlay .settings-modal');
+    if (!modal) fail('点设置没有弹出设置弹窗');
+    if (!document.getElementById('popover').hidden) fail('设置还在走下拉菜单');
+    const closeBtn = modal.querySelector('.settings-close');
+    if (!closeBtn) fail('设置弹窗没有关闭按钮');
+    const mr = modal.getBoundingClientRect();
+    const cr = closeBtn.getBoundingClientRect();
+    if (cr.right < mr.right - 40 || cr.top > mr.top + 30) fail('关闭按钮不在弹窗右上角');
+    const range = modal.querySelector('.settings-range');
+    if (!range) fail('设置弹窗没有字号滑杆');
+    range.value = '125';
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(80);
+    if (Math.abs(f.pane.scale - 1.25) > 0.01) fail('字号滑杆没生效：' + f.pane.scale);
+    const lsInput = modal.querySelector('[data-typo-input="letterSpacing"]');
+    const lhInput = modal.querySelector('[data-typo-input="lineHeight"]');
+    if (!lsInput || !lhInput) fail('设置里没有字间距 / 行高数值');
+    const oldLs = lsInput.value;
+    const oldLh = lhInput.value;
+    lsInput.value = '0.2';
+    lsInput.dispatchEvent(new Event('change', { bubbles: true }));
+    lhInput.value = '1.8';
+    lhInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await wait(80);
+    const sample = document.querySelector('#preview .blk-txt');
+    const sc = getComputedStyle(sample);
+    if (Math.abs(parseFloat(sc.letterSpacing) / parseFloat(sc.fontSize) - 0.2) > 0.01) {
+      fail('字间距数值没生效：' + sc.letterSpacing);
+    }
+    const pc = getComputedStyle(document.getElementById('preview'));
+    if (Math.abs(parseFloat(pc.lineHeight) / parseFloat(pc.fontSize) - 1.8) > 0.03) {
+      fail('行高数值没生效：' + pc.lineHeight);
+    }
+    if (!modal.querySelector('.settings-preview-text')) fail('外观没有预览面板');
+    const cf = modal.querySelector('[data-typo-input="codeFontSize"]');
+    const cl = modal.querySelector('[data-typo-input="codeLineHeight"]');
+    if (!cf || !cl) fail('代码块设置有缺失');
+    const oldCf = cf.value;
+    const oldCl = cl.value;
+    cf.value = '1.1';
+    cf.dispatchEvent(new Event('change', { bubbles: true }));
+    cl.value = '1.6';
+    cl.dispatchEvent(new Event('change', { bubbles: true }));
+    if (document.documentElement.style.getPropertyValue('--code-font-size') !== '1.1em') {
+      fail('代码块字号设置没应用到全局');
+    }
+    if (document.documentElement.style.getPropertyValue('--code-line-height') !== '1.6') {
+      fail('代码块行高设置没应用到全局');
+    }
+    cf.value = oldCf;
+    cf.dispatchEvent(new Event('change', { bubbles: true }));
+    cl.value = oldCl;
+    cl.dispatchEvent(new Event('change', { bubbles: true }));
+    lsInput.value = oldLs;
+    lsInput.dispatchEvent(new Event('change', { bubbles: true }));
+    lhInput.value = oldLh;
+    lhInput.dispatchEvent(new Event('change', { bubbles: true }));
+    modal.querySelector('[data-cat="files"]').click();
+    if (modal.querySelector('[data-pane="files"]').hidden) fail('设置分类切不过去');
+    const filesPane = modal.querySelector('[data-pane="files"]');
+    const filesCard = filesPane.querySelector('.settings-card');
+    if (filesCard.getBoundingClientRect().width < filesPane.clientWidth - 2) {
+      fail('设置卡片右侧还空着一块');
+    }
+    const search = modal.querySelector('.settings-search-input');
+    search.value = '备份文件夹';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    if (modal.querySelector('[data-pane="files"]').hidden) fail('设置搜索没有显示匹配分类');
+    modal.querySelector('.settings-close').click();
+    await wait(100);
+    if (document.querySelector('.settings-overlay')) fail('设置弹窗关不掉');
+    f.pane.setScale(oldScale);
+    return labels.join(' / ');
   });
 
   await run('文件菜单里有「重启」，就在「退出」上面', async () => {
@@ -664,7 +756,7 @@
     search.focus();
     await wait(420);
     if (anyEditing().length) fail('失焦后还有块停在编辑态');
-    if (!document.getElementById('preview').innerHTML.includes(marker)) fail('预览没更新');
+    if (!document.getElementById('preview').textContent.includes(marker)) fail('预览没更新');
     if (!ws.note(note.id).content.includes(marker)) fail('内容没写回笔记');
     return '预览 → 单击某块就地编辑 → 失焦回预览';
   });
@@ -933,6 +1025,188 @@
     return '粗体跨块删除后前后缀和光标位置正确';
   });
 
+  await run('删除字符后光标不跳到块末尾', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '中文 English 文本';
+      f.pane.renderBlocks();
+      await wait(160);
+      const txt = document.querySelector('#preview .blk-txt');
+      const point = (offset) => {
+        const w = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
+        let pos = 0;
+        let node = w.nextNode();
+        while (node) {
+          const len = node.nodeValue.length;
+          if (offset <= pos + len) return { node, off: offset - pos };
+          pos += len;
+          node = w.nextNode();
+        }
+        return { node: txt, off: txt.childNodes.length };
+      };
+      const a = point(3);
+      const b = point(4);
+      const range = document.createRange();
+      range.setStart(a.node, a.off);
+      range.setEnd(b.node, b.off);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand('delete');
+      await wait(220);
+      const cur = window.getSelection();
+      const afterOffset = f.pane._offIn(txt, cur.anchorNode, cur.anchorOffset);
+      if (afterOffset > 4) fail('删除后光标跑到块末尾：' + afterOffset);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '删除后光标留在删除位置';
+  });
+
+  await run('正文横向字距放松但代码块不受影响', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '第一段中文 content 123\n\nEnglish only text\n\n```js\nconst a = 1;\n```';
+      f.pane.renderBlocks();
+      await wait(160);
+      const p = document.querySelector('#preview .blk-txt');
+      const spacing = parseFloat(getComputedStyle(p).letterSpacing);
+      if (!(spacing >= 1.5 && spacing <= 2.3)) fail('中文字距没有放松：' + spacing);
+      const ratio = parseFloat(getComputedStyle(p).lineHeight) / parseFloat(getComputedStyle(p).fontSize);
+      if (Math.abs(ratio - 1.55) > 0.03) fail('行高被额外拉高了：' + ratio.toFixed(2));
+      const latin = document.querySelector('#preview .latin');
+      if (!latin) fail('英文没有单独归零');
+      const latinSpacing = getComputedStyle(latin).letterSpacing;
+      if (latinSpacing !== 'normal' && parseFloat(latinSpacing) !== 0) {
+        fail('英文也被加了字距：' + latinSpacing);
+      }
+      const code = document.querySelector('#preview .code-input');
+      const codeSpacing = getComputedStyle(code).letterSpacing;
+      if (codeSpacing !== 'normal' && parseFloat(codeSpacing) !== 0) {
+        fail('代码块也被加了字距：' + codeSpacing);
+      }
+
+      // 编辑过程中新输入的英文也要立刻归零，不能等下一次重排
+      const live = document.createTextNode(' English');
+      p.appendChild(live);
+      const lr = document.createRange();
+      lr.setStart(live, live.nodeValue.length);
+      lr.collapse(true);
+      const lsel = window.getSelection();
+      lsel.removeAllRanges();
+      lsel.addRange(lr);
+      preview.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ' English' }));
+      await wait(120);
+      const liveLatin = p.querySelector('.latin');
+      if (!liveLatin) fail('编辑中的英文没有实时归零');
+      const liveSpacing = getComputedStyle(liveLatin).letterSpacing;
+      if (liveSpacing !== 'normal' && parseFloat(liveSpacing) !== 0) {
+        fail('编辑中的英文还有字距：' + liveSpacing);
+      }
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '正文 +0.04em，代码块保持 0';
+  });
+
+  await run('删除视口上方的块时右栏上下位置不跳', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = Array.from({ length: 30 }, (_, i) => `第 ${i} 段` + '内容'.repeat(24)).join('\n\n');
+      f.pane.renderBlocks();
+      await wait(180);
+      const preview = document.getElementById('preview');
+      preview.scrollTop = 620;
+      await wait(120);
+      const box = preview.getBoundingClientRect();
+      const els = [...preview.querySelectorAll(':scope > .blk')];
+      const anchorEl = els.find((el) => {
+        const r = el.getBoundingClientRect();
+        return r.bottom > box.top + 1 && r.top < box.bottom - 1;
+      });
+      if (!anchorEl) fail('找不到视口里的块');
+      const anchorIndex = Number(anchorEl.dataset.i);
+      const before = anchorEl.getBoundingClientRect().top - box.top;
+      const txts = [...preview.querySelectorAll('.blk-txt')];
+      const range = document.createRange();
+      range.setStart(textPoint(txts[2]), 0);
+      range.setEnd(textPoint(txts[5]), 0);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      preview.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Delete', bubbles: true, cancelable: true,
+      }));
+      await wait(360);
+      const afterEl = preview.querySelector(`.blk[data-i="${anchorIndex - 3}"]`);
+      if (!afterEl) fail('锚点块被意外删掉');
+      const after = afterEl.getBoundingClientRect().top - box.top;
+      if (Math.abs(after - before) > 2) fail('删除后上下位置跳了：' + before + ' → ' + after);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(180);
+    }
+    return '删除上方块后视口锚点保持不动';
+  });
+
+  await run('切换笔记时右栏从顶部显示', async () => {
+    const notes = ws.notesOf();
+    if (notes.length < 2) fail('笔记不够两篇');
+    const a = notes[0];
+    const b = notes.find((n) => n.id !== a.id);
+    const oldA = a.content;
+    const oldB = b.content;
+    try {
+      const long = Array.from({ length: 30 }, (_, i) => `第 ${i} 段` + '内容'.repeat(30)).join('\n\n');
+      f.selectNote(a.id);
+      await wait(220);
+      a.content = long;
+      b.content = long;
+      f.pane.renderBlocks();
+      await wait(180);
+      const preview = document.getElementById('preview');
+      preview.scrollTop = 420;
+      await wait(80);
+      if (preview.scrollTop < 200) {
+        fail('长笔记没有可滚动高度：top=' + preview.scrollTop + ' sh=' + preview.scrollHeight + ' ch=' + preview.clientHeight + ' len=' + a.content.length);
+      }
+      const samePos = preview.scrollTop;
+      f.pane.show(a);
+      await wait(160);
+      if (preview.scrollTop !== samePos) fail('同一篇重新 show 也跳走了：' + preview.scrollTop);
+      f.selectNote(b.id);
+      await wait(260);
+      if (preview.scrollTop !== 0) fail('切到另一篇后不在顶部：' + preview.scrollTop);
+      f.selectNote(a.id);
+      await wait(260);
+      if (preview.scrollTop !== 0) fail('切回来也不在顶部：' + preview.scrollTop);
+    } finally {
+      f.pane.show(null);
+      a.content = oldA;
+      b.content = oldB;
+      f.selectNote(a.id);
+      await wait(180);
+    }
+    return '切换笔记重置到顶部，同一篇不会';
+  });
+
   await run('跨块选中后按 Delete，删掉的是全部选中内容且不会复活', async () => {
     const note = ws.notesOf().find((n) => (n.content || '').split('\n\n').length >= 5);
     f.selectNote(note.id);
@@ -940,8 +1214,8 @@
     const txts = [...document.querySelectorAll('#preview .blk-txt')].filter((t) => (t.textContent || '').trim());
     if (txts.length < 3) fail('块不够');
     const before = { blocks: f.pane._blocks.length, len: ws.note(note.id).content.length };
-    const a = txts[0].firstChild || txts[0];
-    const c = txts[2].firstChild || txts[2];
+    const a = textPoint(txts[0]);
+    const c = textPoint(txts[2]);
     const range = document.createRange();
     range.setStart(a, 2);
     range.setEnd(c, Math.max(1, (c.nodeValue || '').length - 2));
@@ -976,11 +1250,11 @@
     f.selectNote(note.id);
     await wait(320);
     const txts = [...document.querySelectorAll('#preview .blk-txt')].filter((t) => (t.textContent || '').trim());
-    const a = txts[0].firstChild || txts[0];
-    const c = txts[2].firstChild || txts[2];
+    const a = textPoint(txts[0]);
+    const c = textPoint(txts[2]);
     const range = document.createRange();
     range.setStart(a, 3);
-    range.setEnd(c, 5);
+    range.setEnd(c, Math.min(5, (c.nodeValue || '').length));
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
@@ -1012,8 +1286,8 @@
     await wait(320);
     const txts = [...document.querySelectorAll('#preview .blk-txt')].filter((t) => (t.textContent || '').trim());
     if (txts.length < 3) fail('块不够');
-    const first = txts[0].firstChild || txts[0];
-    const third = txts[2].firstChild || txts[2];
+    const first = textPoint(txts[0]);
+    const third = textPoint(txts[2]);
     const range = document.createRange();
     range.setStart(first, Math.min(5, (first.nodeValue || '').length));
     range.setEnd(third, Math.min(6, (third.nodeValue || '').length));
@@ -1206,8 +1480,8 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       const txts = [...document.querySelectorAll('#preview .blk-txt')];
       if (txts.length < 4) fail('块不够');
       const range = document.createRange();
-      range.setStart(txts[0].firstChild, 0);
-      range.setEnd(txts[2].firstChild, 2);
+      range.setStart(textPoint(txts[0]), 0);
+      range.setEnd(textPoint(txts[2]), 2);
       const sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(range);
@@ -1260,8 +1534,8 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     const a = txts[0];
     const b = txts[2];
     const range = document.createRange();
-    range.setStart(a.firstChild || a, 2);
-    range.setEnd(b.firstChild || b, 4);
+    range.setStart(textPoint(a), 2);
+    range.setEnd(textPoint(b), 4);
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
