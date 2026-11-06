@@ -1307,7 +1307,6 @@ function showSettings() {
           </div>
           <div class="settings-nav-label">选项</div>
           <nav class="settings-nav">${nav}</nav>
-          <div class="settings-side-foot">图屿笔记 · 1.0.2B</div>
         </aside>
 
         <section class="settings-main">
@@ -1422,7 +1421,7 @@ function showSettings() {
                   <div class="settings-preview-title">预览</div>
                   <div class="settings-preview-card">
                     <div class="settings-preview-label">正文</div>
-                    <p class="settings-preview-text">中文排版预览 <span class="latin">English text 123</span> · ① 圈号</p>
+                    <p class="settings-preview-text">中文排版预览，<span class="latin">English text 123</span>，① 圈号。</p>
                     <div class="settings-preview-label">代码块</div>
                     <div class="settings-preview-code">
                       <div class="settings-preview-gutter"><span>1</span><span>2</span><span>3</span></div>
