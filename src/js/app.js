@@ -757,6 +757,20 @@ function menuSpec(name) {
       { label: '收起窗口', action: () => toggleCollapse() },
     ];
   }
+  if (name === 'settings') {
+    return [
+      { label: `笔记字号：${Math.round(pane.scale * 100)}%`, action: () => zoomNote(0) },
+      { label: '笔记字号放大', accel: 'Ctrl+＋', action: () => zoomNote(1.1) },
+      { label: '笔记字号缩小', accel: 'Ctrl+－', action: () => zoomNote(1 / 1.1) },
+      { label: '笔记字号恢复 100%', accel: 'Ctrl+0', action: () => zoomNote(0) },
+      { sep: true },
+      { label: '打开数据文件夹', action: () => api.openFolder('data') },
+      { label: '打开备份文件夹', action: () => api.openFolder('backups') },
+      { sep: true },
+      { label: '清理没被引用的图片…', action: () => cleanupImages() },
+      { label: '立即备份一份', action: () => backupNow() },
+    ];
+  }
   return [
     { label: '使用说明', accel: 'F1', action: () => showHelp() },
     { label: '关于图屿笔记', action: () => showAbout() },
