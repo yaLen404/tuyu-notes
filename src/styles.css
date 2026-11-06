@@ -341,7 +341,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .chip span.text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* 预览里的 Markdown */
-.preview { user-select: text; font-size: 16px; line-height: 1.7; color: var(--text); }
+.preview { user-select: text; font-size: 16px; line-height: 1.55; color: var(--text); }
 
 /* 笔记里的图片：界面上只看到图，看不到它存在哪 */
 .note-img {
@@ -367,8 +367,7 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .preview h2 { font-size: 20px; }
 .preview h3 { font-size: 17px; }
 .preview h1:first-child, .preview h2:first-child { margin-top: 4px; }
-.preview > .blk[data-kind="inline"] { margin-bottom: 4px; }
-.preview p { margin: 0 0 12px; }
+.preview p { margin: 0 0 10px; }
 .preview strong { font-weight: 600; }
 .preview del { color: var(--faint); }
 .preview code {
@@ -384,8 +383,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   margin: 0 0 12px; padding: 2px 0 2px 12px; border-left: 2px solid var(--line);
   color: var(--muted);
 }
-.preview ul, .preview ol { margin: 0 0 12px; padding-left: 22px; }
-.preview li { margin: 4px 0; }
+.preview ul, .preview ol { margin: 0 0 10px; padding-left: 22px; }
+.preview li { margin: 2px 0; }
 .preview li.task { list-style: none; margin-left: -20px; }
 .preview hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 .preview table { border-collapse: collapse; margin: 0 0 12px; font-size: 14px; }
@@ -501,6 +500,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   word-break: break-word;
   caret-color: var(--caret);
   border-radius: 4px;
+  /* 正文横向字距放松一点；代码块有单独的 letter-spacing:0 */
+  letter-spacing: .04em;
   /* 中文与英文 / 数字之间自动留出排版空隙（正文、标题、列表、待办、引用都用 .blk-txt） */
   text-autospace: normal;
 }
