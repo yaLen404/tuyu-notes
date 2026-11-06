@@ -78,7 +78,11 @@ export class NotePane {
     dom.preview.addEventListener('scroll', (e) => this.onCodeScroll(e), true);
     // 中文输入法组合期间不能重画高亮，否则候选字会闪
     dom.preview.addEventListener('compositionstart', (e) => this.onCodeComposition(e, true), true);
-    dom.preview.addEventListener('compositionend', (e) => this.onCodeComposition(e, false), true);
+    dom.preview.addEventListener('compositionend', (e) => {
+      this.onCodeComposition(e, false);
+      const txt = e.target.closest && e.target.closest('.blk-txt');
+      if (txt) this.wrapLatinInBlock(txt);
+    }, true);
     // 源码块（公式/表格）的输入框：blur 不冒泡，只能在捕获阶段听
     dom.preview.addEventListener('blur', (e) => {
       if (e.target && e.target.classList && e.target.classList.contains('blk-editor')) this.commitSource();
@@ -917,6 +921,80 @@ export class NotePane {
     this.writeBack();
   }
 
+  /** 把一段文字拆成"中文纯文本 + 英文 .latin 包"，和渲染时的字距规则一致 */
+  latinFragment(text) {
+    const frag = document.createDocumentFragment();
+    const s = String(text || '');
+    const re = /([\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)|([^\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)/g;
+    let m = re.exec(s);
+    while (m) {
+      if (m[1]) frag.appendChild(document.createTextNode(m[1]));
+      else if (m[2]) {
+        const span = document.createElement('span');
+        span.className = 'latin';
+        span.textContent = m[2];
+        frag.appendChild(span);
+      }
+      m = re.exec(s);
+    }
+    return frag;
+  }
+
+  /** 编辑过程中实时把新输入的英文包进 .latin，保证英文间距不变 */
+  wrapLatinInBlock(txt) {
+    if (!txt || !txt.isContentEditable) return;
+    const sel = window.getSelection();
+    let start = null;
+    let end = null;
+    if (sel && sel.rangeCount) {
+      const r = sel.getRangeAt(0);
+      if (txt.contains(r.startContainer) && txt.contains(r.endContainer)) {
+        start = this._offIn(txt, r.startContainer, r.startOffset);
+        end = this._offIn(txt, r.endContainer, r.endOffset);
+      }
+    }
+
+    // 输入法 / 方向键可能把中文插进旧的 .latin 里，先把旧包装拆开重分
+    for (const span of [...txt.querySelectorAll('span.latin')]) {
+      if (!span.isConnected || span.closest('code, .wl, .tag, .math-inline')) continue;
+      span.replaceWith(this.latinFragment(span.textContent || ''));
+    }
+
+    const walker = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let node = walker.nextNode();
+    while (node) {
+      const parent = node.parentElement;
+      const inProtected = parent && parent.closest('.latin, code, .wl, .tag, .math-inline');
+      if (!inProtected && node.nodeValue && /[^\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(node.nodeValue)) {
+        nodes.push(node);
+      }
+      node = walker.nextNode();
+    }
+    for (const n of nodes) n.replaceWith(this.latinFragment(n.nodeValue));
+
+    if (start == null || end == null) return;
+    const locate = (offset) => {
+      const w = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
+      let pos = 0;
+      let cur = w.nextNode();
+      while (cur) {
+        const len = cur.nodeValue.length;
+        if (offset <= pos + len) return { node: cur, off: offset - pos };
+        pos += len;
+        cur = w.nextNode();
+      }
+      return { node: txt, off: txt.childNodes.length };
+    };
+    const a = locate(Math.min(start, end));
+    const b = locate(Math.max(start, end));
+    const range = document.createRange();
+    range.setStart(a.node, a.off);
+    range.setEnd(b.node, b.off);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   // ---------------------------------------------------------------- 编辑交互
   /** 光标落在哪一块，就给那一块加 .cur（替代原来的 :focus-within） */
   markCurrent(blk) {
@@ -1022,6 +1100,9 @@ export class NotePane {
     if (!blk) return;
     const index = Number(blk.dataset.i);
     this.syncInline(index);
+    // 渲染时会把英文包进 .latin 归零字距；编辑中新打进来的英文也要立刻处理，
+    // 否则会继承中文的 .12em，看起来英文间距变大。
+    if (!e.isComposing) this.wrapLatinInBlock(txt);
     // 输入即转换：块首打 "# "、"- "、"1. "、"[] "、"> " 直接变块类型
     // 代码围栏不在这里转：Typora 是敲 ```（可带语言）再按回车才变代码块
     this.autoFormat(index);
