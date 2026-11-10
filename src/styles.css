@@ -519,7 +519,8 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 }
 /* 空块也要占一行：代码块后面的空段落如果只有 4px 高，根本点不中，
    用户会误点进代码块，打字/回车就把代码内容改掉。 */
-.blk-empty .blk-txt { min-height: 1.55em; }
+.blk-empty .blk-txt,
+.blk-txt:empty { min-height: 1.55em; }
 .blk-empty.is-only .blk-txt:empty::before {
   content: "右键选择块类型，或直接开始写…";
   color: var(--faint);

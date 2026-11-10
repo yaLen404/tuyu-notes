@@ -1074,6 +1074,23 @@ export class NotePane {
   }
 
   /** 按回车：在光标处拆块 */
+  /** 空的无序 / 有序 / 待办项再回车或往下走：退出列表，变回普通段落 */
+  exitEmptyList(index) {
+    const blk = this._blocks[index];
+    if (!blk || !['bullet', 'num', 'task'].includes(blk.type)) return false;
+    const txt = this.editableEl(index);
+    if (!txt || htmlToInline(txt.innerHTML).trim()) return false;
+    blk.type = 'p';
+    blk.inline = '';
+    delete blk.done;
+    delete blk.num;
+    delete blk.depth;
+    this.writeBack();
+    this.renderBlocks();
+    this.focusBlock(index, 'start');
+    return true;
+  }
+
   splitAtCaret() {
     const index = this.currentIndex();
     if (index == null) return;
@@ -1082,6 +1099,7 @@ export class NotePane {
     if (!txt) return;
     const cur0 = this._blocks[index];
     if (!cur0) return;
+    if (this.exitEmptyList(index)) return;
     // 光标不在这块文本里（比如刚点击过宿主）：当成"在块尾回车"
     const r0 = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
     if (!r0 || !txt.contains(r0.startContainer)) {
@@ -2235,6 +2253,11 @@ export class NotePane {
         if (e.key === 'ArrowDown' && atEnd && index < this._blocks.length - 1) {
           e.preventDefault();
           this.focusBlock(index + 1, 'start');
+          return;
+        }
+        if (e.key === 'ArrowDown' && atEnd && index === this._blocks.length - 1
+          && this.exitEmptyList(index)) {
+          e.preventDefault();
           return;
         }
       }

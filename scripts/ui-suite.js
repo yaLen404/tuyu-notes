@@ -2847,6 +2847,68 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('最后一块无序列表回车后，新列表可编辑且能离开', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '- 第一项';
+      f.pane.renderBlocks();
+      await wait(180);
+      const first = document.querySelector('#preview .blk-txt');
+      f.pane.focusBlock(0, 'end');
+      keyOn(first, 'Enter');
+      await wait(240);
+      if (f.pane._blocks.length !== 2) fail('回车没有拆出第二块');
+      if (f.pane._blocks[1].type !== 'bullet') fail('新块不是无序列表');
+      const second = document.querySelector('#preview .blk[data-i="1"] .blk-txt');
+      if (!second) fail('新列表块没有文本容器');
+      if (!second.contains(window.getSelection().anchorNode)) fail('光标没进新列表块');
+      if (second.getBoundingClientRect().height < 10) fail('空列表块没有可编辑高度');
+      second.textContent = '第二项';
+      second.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '第二项' }));
+      await wait(160);
+      if (!ws.note(note.id).content.includes('第二项')) fail('新列表块不能编辑');
+      if (f.pane._blocks.length !== 2) fail('编辑后块数变化');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '最后列表回车 → 新列表可编辑';
+  });
+
+  await run('最后一块空无序列表按 ↓ 退出列表', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '- 第一项';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.focusBlock(0, 'end');
+      keyOn(document.querySelector('#preview .blk-txt'), 'Enter');
+      await wait(200);
+      const empty = document.querySelector('#preview .blk[data-i="1"] .blk-txt');
+      if (!empty) fail('没有生成空列表块');
+      keyOn(empty, 'ArrowDown');
+      await wait(220);
+      if (f.pane._blocks.length !== 2) fail('↓ 多生成了一块');
+      if (['bullet', 'num', 'task'].includes(f.pane._blocks[1].type)) {
+        fail('↓ 没有退出无序列表：' + f.pane._blocks[1].type);
+      }
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '空列表 ↓ → 普通段落';
+  });
+
   await run('代码块按 ↓ 到下一块时，右栏滚到光标处', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
