@@ -1198,6 +1198,29 @@ export class NotePane {
     // 单宿主：光标用 Range 落，焦点给 #preview
     if (document.activeElement !== this.dom.preview) this.dom.preview.focus();
     if (!this.caretAt(index, where)) return;
+    this.ensureCaretVisible();
+  }
+
+  /** 光标落在视口外时，把右栏滚到能看见它的位置 */
+  ensureCaretVisible() {
+    const box = this.dom.preview.getBoundingClientRect();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0).cloneRange();
+    let rect = range.getBoundingClientRect();
+    if ((!rect || (!rect.width && !rect.height)) && range.startContainer) {
+      const node = range.startContainer.nodeType === 1
+        ? range.startContainer
+        : range.startContainer.parentElement;
+      if (node && node.getBoundingClientRect) rect = node.getBoundingClientRect();
+    }
+    if (!rect || (!rect.width && !rect.height)) return;
+    const margin = 18;
+    if (rect.top < box.top + margin) {
+      this.dom.preview.scrollTop -= box.top + margin - rect.top;
+    } else if (rect.bottom > box.bottom - margin) {
+      this.dom.preview.scrollTop += rect.bottom - (box.bottom - margin);
+    }
   }
 
   // ---------------------------------------------------------------- 块结构操作

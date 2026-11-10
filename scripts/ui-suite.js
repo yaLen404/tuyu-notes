@@ -2847,6 +2847,38 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('代码块按 ↓ 到下一块时，右栏滚到光标处', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '```js\n' + Array.from({ length: 36 }, (_, i) => `const line${i} = ${i};`).join('\n')
+        + '\n```\n\n目的地段落';
+      f.pane.renderBlocks();
+      await wait(180);
+      const preview = document.getElementById('preview');
+      preview.scrollTop = 0;
+      f.pane.focusCode(0, 'end');
+      await wait(100);
+      keyOn(f.pane.codeInput(0), 'ArrowDown');
+      await wait(260);
+      const target = document.querySelector('#preview .blk[data-i="1"]');
+      if (!target) fail('没有落到下一块');
+      const tr = target.getBoundingClientRect();
+      const br = preview.getBoundingClientRect();
+      if (tr.bottom < br.top || tr.top > br.bottom) {
+        fail('下一块在视口外：' + JSON.stringify({ top: tr.top, bottom: tr.bottom, viewTop: br.top, viewBottom: br.bottom }));
+      }
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '↓ 离开代码块后右栏跟随光标';
+  });
+
   await run('代码块：↓ 从末行出去、↑ 从首行出去、块首退格不拆围栏', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
