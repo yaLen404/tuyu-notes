@@ -2066,6 +2066,30 @@ export class NotePane {
       : String(b.inline || ''));
     const tableDefault = '| 列 1 | 列 2 |\n| --- | --- |\n|  |  |';
 
+    // 多块转代码：所有选中内容合并进同一个代码块，而不是生成多个 code 块
+    if (type === 'code' && idxs.length > 1) {
+      const first = idxs[0];
+      const picked = new Set(idxs);
+      const src = idxs.map((i) => textOf(this._blocks[i])).join('\n');
+      const merged = { type: 'code', src, lang: '' };
+      const firstBlk = this._blocks[first];
+      if (firstBlk && firstBlk.type === 'code' && firstBlk.lang) {
+        merged.lang = firstBlk.lang;
+        merged.langTouched = firstBlk.langTouched;
+      }
+      const nextBlocks = [];
+      this._blocks.forEach((b, i) => {
+        if (i === first) nextBlocks.push(merged);
+        else if (!picked.has(i)) nextBlocks.push(b);
+      });
+      this._blocks = nextBlocks;
+      this.writeBack();
+      this.renderBlocks();
+      this._lastEdit = first;
+      this.scheduleAutoLanguage(first, 0);
+      return;
+    }
+
     for (const i of idxs) {
       const b = this._blocks[i];
       if (!b) continue;

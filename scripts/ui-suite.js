@@ -2848,6 +2848,31 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('多块转代码时合并成一个代码块', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '第一段\n\n第二段\n\n第三段';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlocks([0, 1, 2], 'code');
+      await wait(260);
+      if (f.pane._blocks.length !== 1) fail('没有合并成一块：' + f.pane._blocks.length);
+      const blk = f.pane._blocks[0];
+      if (blk.type !== 'code') fail('合并后不是代码块');
+      if (blk.src !== '第一段\n第二段\n第三段') fail('代码内容没合并对：' + blk.src);
+      if (document.querySelectorAll('#preview .blk-code').length !== 1) fail('DOM 里不是单个代码块');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '三段 → 一个代码块';
+  });
+
   await run('右键菜单颜色子菜单能给整块文字上色', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
