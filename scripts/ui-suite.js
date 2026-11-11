@@ -2903,6 +2903,40 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '颜色子菜单 → Markdown → 预览往返正常';
   });
 
+  await run('无文字选区时颜色作用于光标所在块', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '整块上色';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.focusBlock(0, 'end');
+      f.pane.openBlockContextMenu(0, 120, 160);
+      await wait(120);
+      const typeBtn = document.querySelector('.blk-menu [data-act="type"]');
+      if (!typeBtn || !typeBtn.textContent.includes('块的格式')) fail('菜单没有改成「块的格式」');
+      const colorBtn = document.querySelector('.blk-menu [data-act="color"]');
+      if (!colorBtn) fail('无选区时右键菜单没有颜色项');
+      colorBtn.click();
+      await wait(100);
+      const red = document.querySelector('.color-sub [data-color="#e06c75"]');
+      if (!red) fail('颜色子菜单没有红色');
+      red.click();
+      await wait(200);
+      if (!note.content.includes('{{color:#e06c75|整块上色}}')) {
+        fail('无选区时没有作用于整块：' + note.content);
+      }
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '无选区 → 整块上色';
+  });
+
   await run('段尾 Delete 合并下一块且不重复内容', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

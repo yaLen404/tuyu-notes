@@ -1796,9 +1796,7 @@ export class NotePane {
       const picked = this.selectedIndexes();
       const listLike = picked.some((i) => ['bullet', 'num', 'task'].includes(this._blocks[i] && this._blocks[i].type));
       const hasTask = picked.some((i) => this._blocks[i] && this._blocks[i].type === 'task');
-      const selNow = window.getSelection();
-      const hasText = Boolean(selNow && !selNow.isCollapsed && String(selNow || ''));
-      const canColor = hasText && picked.some((i) => this._blocks[i]
+      const canColor = picked.some((i) => this._blocks[i]
         && this._blocks[i].type !== 'code' && !SOURCE_BLOCKS.includes(this._blocks[i].type));
       const m2 = document.createElement('div');
       m2.className = 'blk-menu';
@@ -1807,7 +1805,7 @@ export class NotePane {
         '<button data-act="cut">剪切选中</button>',
         '<button data-act="del" class="danger">删除选中</button>',
         '<div class="sep"></div>',
-        '<button data-act="type" class="has-sub">' + (this._sel.size > 1 ? '转为选中 ' + this._sel.size + ' 块' : '转为这一块') + '<span class="sub-arrow">▸</span></button>',
+        '<button data-act="type" class="has-sub">' + (this._sel.size > 1 ? '块的格式（' + this._sel.size + ' 块）' : '块的格式') + '<span class="sub-arrow">▸</span></button>',
         canColor ? '<button data-act="color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>' : '',
         listLike ? '<button data-act="indent">缩进一级</button>' : '',
         listLike ? '<button data-act="outdent">减少缩进</button>' : '',
@@ -1842,9 +1840,7 @@ export class NotePane {
       return;
     }
     const isCodeBlock = Boolean(this._blocks[index] && this._blocks[index].type === 'code');
-    const selNow = window.getSelection();
-    const hasText = Boolean(selNow && !selNow.isCollapsed && String(selNow || ''));
-    const canColor = hasText && Boolean(this._blocks[index] && !isCodeBlock
+    const canColor = Boolean(this._blocks[index] && !isCodeBlock
       && !SOURCE_BLOCKS.includes(this._blocks[index].type));
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
@@ -1857,7 +1853,7 @@ export class NotePane {
       '<button data-act="select">全选</button>',
       isCodeBlock ? '<button data-act="copy-code">复制代码</button>' : '',
       '<div class="sep"></div>',
-      '<button data-act="type" class="has-sub">转为<span class="sub-arrow">▸</span></button>',
+      '<button data-act="type" class="has-sub">块的格式<span class="sub-arrow">▸</span></button>',
       canColor ? '<button data-act="color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>' : '',
       '<button data-act="del">删除这一块</button>',
     ].join('');
@@ -1906,7 +1902,7 @@ export class NotePane {
     menu.innerHTML = [
       '<button data-act="copy-text">复制所选文字</button>',
       '<div class="sep"></div>',
-      '<button data-act="type" class="has-sub">转为选中 ' + picked.length + ' 块<span class="sub-arrow">▸</span></button>',
+      '<button data-act="type" class="has-sub">块的格式（' + picked.length + ' 块）<span class="sub-arrow">▸</span></button>',
       canColor ? '<button data-act="color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>' : '',
       listLike ? '<button data-act="indent">缩进一级</button>' : '',
       listLike ? '<button data-act="outdent">减少缩进</button>' : '',
@@ -1938,13 +1934,38 @@ export class NotePane {
     setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
   }
 
-  /** 只给当前选中的文字上色，不再改整块 */
-  setSelectionColor(color) {
+  /** 有文字选区时只给选中的文字上色；没有选区时给 target 块整块上色 */
+  setSelectionColor(color, target) {
+    const c = String(color || 'inherit');
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.rangeCount && String(sel || '')) {
+      return this.colorSelectedText(c);
+    }
+    const idxs = Array.isArray(target) ? target : [target];
+    for (const i of idxs) {
+      const blk = this._blocks[i];
+      if (!blk || blk.type === 'code' || SOURCE_BLOCKS.includes(blk.type)) continue;
+      const txt = this.editableEl(i);
+      if (!txt) continue;
+      let inner = txt.innerHTML;
+      const old = txt.querySelector(':scope > span.fyn-color');
+      if (old) inner = old.innerHTML;
+      if (!inner.trim()) continue;
+      txt.innerHTML = c === 'inherit'
+        ? inner
+        : `<span class="fyn-color" data-color="${escapeHtml(c)}" style="color:${escapeHtml(c)}">${inner}</span>`;
+      this.syncInline(i);
+    }
+    this.writeBack();
+    return true;
+  }
+
+  /** 把当前选区按块拆开，只包住真正选中的文字 */
+  colorSelectedText(c) {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
     const picked = sel.getRangeAt(0);
     if (picked.collapsed || !picked.toString()) return false;
-    const c = String(color || 'inherit');
     const ranges = [];
     for (const el of this.dom.preview.querySelectorAll('.blk-txt')) {
       if (!picked.intersectsNode(el)) continue;
@@ -1992,9 +2013,11 @@ export class NotePane {
     ];
     const sub = document.createElement('div');
     sub.className = 'blk-menu slash sub color-sub';
-    sub.innerHTML = colors.map(([c, label]) =>
-      `<button data-color="${c}"><span class="color-dot${c ? '' : ' none'}"`
-      + `${c ? ` style="background:${c}"` : ''}></span>${label}</button>`).join('');
+    sub.innerHTML = colors.map(([c, label]) => {
+      const none = c === 'inherit';
+      return `<button data-color="${c}"><span class="color-dot${none ? ' none' : ''}"`
+        + `${none ? '' : ` style="background:${c}"`}></span>${label}</button>`;
+    }).join('');
     this.placeSubMenu(sub, anchor);
     this._subEl = sub;
     sub.addEventListener('mousedown', (ev) => ev.preventDefault());
@@ -2002,11 +2025,11 @@ export class NotePane {
       const btn = ev.target.closest('button');
       if (!btn) return;
       this.closeBlockMenu();
-      this.setSelectionColor(btn.dataset.color || 'inherit');
+      this.setSelectionColor(btn.dataset.color || 'inherit', target);
     });
   }
 
-  /** 「转为」子菜单：跟在右键菜单右边。target 可以是单块下标，也可以是选中块数组。 */
+  /** 「块的格式」子菜单：跟在右键菜单右边。target 可以是单块下标，也可以是选中块数组。 */
   openTypeSubMenu(target, anchor) {
     if (this._subEl) { this._subEl.remove(); this._subEl = null; }
     const items = [
