@@ -2873,6 +2873,12 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(120);
       const red = document.querySelector('.color-sub [data-color="#e06c75"]');
       if (!red) fail('颜色子菜单没有红色');
+      const dot = red.querySelector('.color-dot');
+      const dotStyle = getComputedStyle(dot);
+      if (parseFloat(dotStyle.width) < 9 || parseFloat(dotStyle.height) < 9) {
+        fail('颜色标记不是圆点：' + dotStyle.width + '×' + dotStyle.height);
+      }
+      if (dotStyle.borderRadius !== '50%') fail('颜色标记不是圆形');
       red.click();
       await wait(220);
       if (!note.content.includes('{{color:#e06c75|彩色}}文字和普通文字')) {

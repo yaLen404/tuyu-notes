@@ -595,9 +595,10 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .blk-menu button:hover { background: var(--hover); }
 .blk-menu button.danger { color: #fb464c; }
 .blk-menu.slash { min-width: 150px; }
-.blk-menu .color-sub button { display: flex; align-items: center; gap: 8px; }
+.blk-menu.color-sub button { display: flex; align-items: center; gap: 8px; }
 .blk-menu .color-dot {
-  flex: 0 0 11px; width: 11px; height: 11px; border-radius: 50%;
+  display: inline-block; flex: 0 0 11px; width: 11px; height: 11px;
+  border-radius: 50%; background-clip: padding-box;
   border: 1px solid rgba(255, 255, 255, .22);
 }
 .blk-menu .color-dot.none {
