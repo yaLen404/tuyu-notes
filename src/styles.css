@@ -595,6 +595,19 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .blk-menu button:hover { background: var(--hover); }
 .blk-menu button.danger { color: #fb464c; }
 .blk-menu.slash { min-width: 150px; }
+.blk-menu .color-sub button { display: flex; align-items: center; gap: 8px; }
+.blk-menu .color-dot {
+  flex: 0 0 11px; width: 11px; height: 11px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .22);
+}
+.blk-menu .color-dot.none {
+  background: transparent; border-color: var(--muted);
+  position: relative;
+}
+.blk-menu .color-dot.none::after {
+  content: ''; position: absolute; left: 1px; right: 1px; top: 50%;
+  border-top: 1px solid var(--muted); transform: rotate(-45deg);
+}
 
 /* 文本光标统一用亮色：深色背景上默认的深紫几乎看不见 */
 input, textarea, [contenteditable="true"], .blk-editor, .note-title {

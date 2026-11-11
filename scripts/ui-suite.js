@@ -2848,6 +2848,45 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('右键菜单颜色子菜单能给整块文字上色', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '彩色文字';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.openBlockContextMenu(0, 120, 160);
+      await wait(120);
+      const colorBtn = document.querySelector('.blk-menu [data-act="color"]');
+      if (!colorBtn) fail('右键菜单没有颜色项');
+      colorBtn.click();
+      await wait(120);
+      const red = document.querySelector('.color-sub [data-color="#e06c75"]');
+      if (!red) fail('颜色子菜单没有红色');
+      red.click();
+      await wait(220);
+      if (!note.content.includes('{{color:#e06c75|彩色文字}}')) {
+        fail('颜色没有写回 Markdown：' + note.content);
+      }
+      const colored = document.querySelector('#preview .fyn-color');
+      if (!colored) fail('预览没有渲染颜色');
+      if (getComputedStyle(colored).color !== 'rgb(224, 108, 117)') {
+        fail('颜色显示不对：' + getComputedStyle(colored).color);
+      }
+      f.pane.renderBlocks();
+      await wait(120);
+      if (!document.querySelector('#preview .fyn-color')) fail('重新渲染后颜色丢了');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '颜色子菜单 → Markdown → 预览往返正常';
+  });
+
   await run('段尾 Delete 合并下一块且不重复内容', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

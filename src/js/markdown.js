@@ -97,8 +97,23 @@ function autoSpaceHtml(text) {
 
 /** 行内：返回 HTML 片段。exists(title) 用来区分"链接目标是否存在"。
  *  递归调用必须用**独立的**正则实例，否则共享的 lastIndex 会把循环搞死。 */
+const COLOR_TOKEN = /\{\{color:([#a-zA-Z0-9]+)\|([\s\S]*?)\}\}/g;
+const safeColor = (value) => {
+  const c = String(value || '').trim();
+  return /^#[0-9a-f]{3,8}$/i.test(c) || /^[a-z]{3,20}$/i.test(c) ? c : '';
+};
+
 export function inline(text, exists = () => true) {
-  const src = String(text == null ? '' : text);
+  let src = String(text == null ? '' : text);
+  const colorHtml = [];
+  if (src.includes('{{color:')) {
+    src = src.replace(COLOR_TOKEN, (all, color, inner) => {
+      const c = safeColor(color);
+      if (!c) return all;
+      colorHtml.push(`<span class="fyn-color" data-color="${escapeHtml(c)}" style="color:${c}">${inline(inner, exists)}</span>`);
+      return `\uE000${colorHtml.length - 1}\uE001`;
+    });
+  }
   const re = new RegExp(INLINE_SRC, 'g');
   let out = '';
   let pos = 0;
@@ -148,7 +163,7 @@ export function inline(text, exists = () => true) {
     m = re.exec(src);
   }
   if (pos < src.length) out += autoSpaceHtml(src.slice(pos));
-  return out;
+  return out.replace(/\uE000(\d+)\uE001/g, (all, i) => colorHtml[Number(i)] || '');
 }
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
@@ -392,6 +407,10 @@ function nodesToInline(nodes) {
     if (tag === 'img') { out += node.dataset && node.dataset.img ? '![[' + node.dataset.img + ']]' : ''; continue; }
     if (tag === 'span') {
       if (node.dataset && node.dataset.tex !== undefined) { out += '$' + node.dataset.tex + '$'; continue; }
+      if (node.classList && node.classList.contains('fyn-color')) {
+        const c = safeColor((node.dataset && node.dataset.color) || node.style.color);
+        if (c) { out += '{{color:' + c + '|' + inner + '}}'; continue; }
+      }
       if (node.classList && node.classList.contains('tag')) {
         out += '#' + ((node.dataset && node.dataset.tag) || inner);
         continue;

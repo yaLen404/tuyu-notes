@@ -1796,6 +1796,8 @@ export class NotePane {
       const picked = this.selectedIndexes();
       const listLike = picked.some((i) => ['bullet', 'num', 'task'].includes(this._blocks[i] && this._blocks[i].type));
       const hasTask = picked.some((i) => this._blocks[i] && this._blocks[i].type === 'task');
+      const canColor = picked.some((i) => this._blocks[i]
+        && this._blocks[i].type !== 'code' && !SOURCE_BLOCKS.includes(this._blocks[i].type));
       const m2 = document.createElement('div');
       m2.className = 'blk-menu';
       m2.innerHTML = [
@@ -1804,6 +1806,7 @@ export class NotePane {
         '<button data-act="del" class="danger">删除选中</button>',
         '<div class="sep"></div>',
         '<button data-act="type" class="has-sub">' + (this._sel.size > 1 ? '转为选中 ' + this._sel.size + ' 块' : '转为这一块') + '<span class="sub-arrow">▸</span></button>',
+        canColor ? '<button data-act="color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>' : '',
         listLike ? '<button data-act="indent">缩进一级</button>' : '',
         listLike ? '<button data-act="outdent">减少缩进</button>' : '',
         hasTask ? '<button data-act="check">全部勾选</button>' : '',
@@ -1817,6 +1820,7 @@ export class NotePane {
         if (!btn) return;
         const act = btn.dataset.act;
         if (act === 'type') { this.openTypeSubMenu(picked, btn); return; }
+        if (act === 'color') { this.openColorSubMenu(picked, btn); return; }
         this.closeBlockMenu();
         if (act === 'copy' || act === 'cut') {
           const clip = window.tuyu && window.tuyu.clipboard;
@@ -1830,10 +1834,14 @@ export class NotePane {
       });
       const typeBtn2 = m2.querySelector('[data-act="type"]');
       if (typeBtn2) typeBtn2.addEventListener('mouseenter', () => this.openTypeSubMenu(picked, typeBtn2));
+      const colorBtn2 = m2.querySelector('[data-act="color"]');
+      if (colorBtn2) colorBtn2.addEventListener('mouseenter', () => this.openColorSubMenu(picked, colorBtn2));
       setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
       return;
     }
     const isCodeBlock = Boolean(this._blocks[index] && this._blocks[index].type === 'code');
+    const canColor = Boolean(this._blocks[index] && !isCodeBlock
+      && !SOURCE_BLOCKS.includes(this._blocks[index].type));
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
     menu.innerHTML = [
@@ -1846,6 +1854,7 @@ export class NotePane {
       isCodeBlock ? '<button data-act="copy-code">复制代码</button>' : '',
       '<div class="sep"></div>',
       '<button data-act="type" class="has-sub">转为<span class="sub-arrow">▸</span></button>',
+      canColor ? '<button data-act="color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>' : '',
       '<button data-act="del">删除这一块</button>',
     ].join('');
     this.placeMenu(menu, x, y);
@@ -1857,6 +1866,7 @@ export class NotePane {
       if (!btn) return;
       const act = btn.dataset.act;
       if (act === 'type') { this.openTypeSubMenu(index, btn); return; }
+      if (act === 'color') { this.openColorSubMenu(index, btn); return; }
       this.closeBlockMenu();
       if (act === 'cut') this.cutBlock(index);
       else if (act === 'copy') this.copyBlock(index);
@@ -1873,6 +1883,8 @@ export class NotePane {
     });
     const typeBtn = menu.querySelector('[data-act="type"]');
     typeBtn.addEventListener('mouseenter', () => this.openTypeSubMenu(index, typeBtn));
+    const colorBtn = menu.querySelector('[data-act="color"]');
+    if (colorBtn) colorBtn.addEventListener('mouseenter', () => this.openColorSubMenu(index, colorBtn));
 
     setTimeout(() => {
       window.addEventListener('pointerdown', this._closeMenuOnOutside, true);
@@ -1883,12 +1895,15 @@ export class NotePane {
   openTextSelectionMenu(picked, x, y) {
     const listLike = picked.some((i) => ['bullet', 'num', 'task'].includes(this._blocks[i] && this._blocks[i].type));
     const hasTask = picked.some((i) => this._blocks[i] && this._blocks[i].type === 'task');
+    const canColor = picked.some((i) => this._blocks[i]
+      && this._blocks[i].type !== 'code' && !SOURCE_BLOCKS.includes(this._blocks[i].type));
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
     menu.innerHTML = [
       '<button data-act="copy-text">复制所选文字</button>',
       '<div class="sep"></div>',
       '<button data-act="type" class="has-sub">转为选中 ' + picked.length + ' 块<span class="sub-arrow">▸</span></button>',
+      canColor ? '<button data-act="color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>' : '',
       listLike ? '<button data-act="indent">缩进一级</button>' : '',
       listLike ? '<button data-act="outdent">减少缩进</button>' : '',
       hasTask ? '<button data-act="check">全部勾选</button>' : '',
@@ -1902,6 +1917,7 @@ export class NotePane {
       if (!btn) return;
       const act = btn.dataset.act;
       if (act === 'type') { this.openTypeSubMenu(picked, btn); return; }
+      if (act === 'color') { this.openColorSubMenu(picked, btn); return; }
       this.closeBlockMenu();
       if (act === 'copy-text') {
         const clip = window.tuyu && window.tuyu.clipboard;
@@ -1913,7 +1929,60 @@ export class NotePane {
     });
     const typeBtn = menu.querySelector('[data-act="type"]');
     if (typeBtn) typeBtn.addEventListener('mouseenter', () => this.openTypeSubMenu(picked, typeBtn));
+    const colorBtn = menu.querySelector('[data-act="color"]');
+    if (colorBtn) colorBtn.addEventListener('mouseenter', () => this.openColorSubMenu(picked, colorBtn));
     setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
+  }
+
+  /** 给整块文字上色；target 可以是单块下标，也可以是选中块数组。 */
+  setBlockColor(target, color) {
+    const idxs = Array.isArray(target) ? target : [target];
+    const c = String(color || '');
+    for (const i of idxs) {
+      const blk = this._blocks[i];
+      if (!blk || blk.type === 'code' || SOURCE_BLOCKS.includes(blk.type)) continue;
+      const txt = this.editableEl(i);
+      if (!txt) continue;
+      let inner = txt.innerHTML;
+      const old = txt.querySelector(':scope > span.fyn-color');
+      if (old) inner = old.innerHTML;
+      if (!inner.trim()) continue;
+      txt.innerHTML = c
+        ? `<span class="fyn-color" data-color="${escapeHtml(c)}" style="color:${escapeHtml(c)}">${inner}</span>`
+        : inner;
+      this.syncInline(i);
+    }
+    this.writeBack();
+    this.renderBlocks();
+  }
+
+  /** 颜色子菜单：默认 / 灰 / 红 / 橙 / 黄 / 绿 / 蓝 / 紫 */
+  openColorSubMenu(target, anchor) {
+    if (this._subEl) { this._subEl.remove(); this._subEl = null; }
+    const colors = [
+      ['', '默认'],
+      ['#8b949e', '灰'],
+      ['#e06c75', '红'],
+      ['#d19a66', '橙'],
+      ['#e5c07b', '黄'],
+      ['#98c379', '绿'],
+      ['#61afef', '蓝'],
+      ['#c678dd', '紫'],
+    ];
+    const sub = document.createElement('div');
+    sub.className = 'blk-menu slash sub color-sub';
+    sub.innerHTML = colors.map(([c, label]) =>
+      `<button data-color="${c}"><span class="color-dot${c ? '' : ' none'}"`
+      + `${c ? ` style="background:${c}"` : ''}></span>${label}</button>`).join('');
+    this.placeSubMenu(sub, anchor);
+    this._subEl = sub;
+    sub.addEventListener('mousedown', (ev) => ev.preventDefault());
+    sub.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button');
+      if (!btn) return;
+      this.closeBlockMenu();
+      this.setBlockColor(target, btn.dataset.color || '');
+    });
   }
 
   /** 「转为」子菜单：跟在右键菜单右边。target 可以是单块下标，也可以是选中块数组。 */
