@@ -1550,7 +1550,8 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     const note = ws.notesOf()[0];
     f.selectNote(note.id);
     await wait(240);
-    f.pane.focusBlock(0, 'end');
+    // 放在块首，避免段尾 Delete 触发编辑器自己的并块逻辑
+    f.pane.focusBlock(0, 'start');
     await wait(240);
     const ed = activeEditor();
     if (!ed) fail('没有光标');
@@ -2845,6 +2846,40 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(140);
     }
     return '空代码块退格 / Delete → 整块删除';
+  });
+
+  await run('段尾 Delete 合并下一块且不重复内容', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '第一段内容\n\n第二段内容';
+      f.pane.renderBlocks();
+      await wait(160);
+      const txt = document.querySelector('#preview .blk-txt');
+      const w = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
+      let last = null;
+      let n = w.nextNode();
+      while (n) { last = n; n = w.nextNode(); }
+      const range = document.createRange();
+      range.setStart(last, last.nodeValue.length);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      f.pane.focusBlock(0, 'end');
+      keyOn(txt, 'Delete');
+      await wait(240);
+      if (note.content !== '第一段内容第二段内容') fail('Delete 合并内容不对：' + note.content);
+      if (f.pane._blocks.length !== 1) fail('Delete 后块数不对：' + f.pane._blocks.length);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '段尾 Delete 合并后无重复';
   });
 
   await run('最后一块无序列表回车后，新列表可编辑且能离开', async () => {

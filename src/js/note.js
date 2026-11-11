@@ -614,6 +614,37 @@ export class NotePane {
     return true;
   }
 
+  /** 光标在块尾按 Delete：把下一块并进当前块，避免浏览器直接拆 DOM 造成内容重复 */
+  deleteForwardAtEnd(txt, index) {
+    const sel = window.getSelection();
+    if (!sel || !sel.isCollapsed || !sel.rangeCount || !txt) return false;
+    const r = sel.getRangeAt(0);
+    if (!txt.contains(r.endContainer)) return false;
+    const after = document.createRange();
+    after.selectNodeContents(txt);
+    after.setStart(r.endContainer, r.endOffset);
+    if (after.toString().length) return false;
+
+    const cur = this._blocks[index];
+    const next = this._blocks[index + 1];
+    if (!cur || !next) return false;
+    const caretPos = this._offIn(txt, r.endContainer, r.endOffset);
+
+    // 下一块是源码 / 代码：不强行并，先拦住浏览器的默认拆块
+    if (next.type === 'code' || SOURCE_BLOCKS.includes(next.type)) return true;
+
+    const tail = blockTextOf(next);
+    if (tail) {
+      cur.inline = (cur.inline || '') + tail;
+      if (cur.type === 'empty') cur.type = 'p';
+    }
+    this._blocks.splice(index + 1, 1);
+    this.writeBack({ forceHistory: true });
+    this.renderBlocks();
+    this.caretAtOffset(index, caretPos);
+    return true;
+  }
+
   /** 删除"跨块的文字选区"覆盖的全部内容；返回 true 表示已经处理 */
   deleteSelectedContent(opts = {}) {
     const sel = window.getSelection();
@@ -2213,6 +2244,11 @@ export class NotePane {
       if (this.deleteSelectedContent({ copy: true })) { e.preventDefault(); return; }
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && !e.shiftKey && this.deleteSelectedContent()) {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'Delete' && !e.shiftKey && !e.ctrlKey && !e.metaKey
+      && this.deleteForwardAtEnd(txt, index)) {
       e.preventDefault();
       return;
     }
