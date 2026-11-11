@@ -1796,7 +1796,9 @@ export class NotePane {
       const picked = this.selectedIndexes();
       const listLike = picked.some((i) => ['bullet', 'num', 'task'].includes(this._blocks[i] && this._blocks[i].type));
       const hasTask = picked.some((i) => this._blocks[i] && this._blocks[i].type === 'task');
-      const canColor = picked.some((i) => this._blocks[i]
+      const selNow = window.getSelection();
+      const hasText = Boolean(selNow && !selNow.isCollapsed && String(selNow || ''));
+      const canColor = hasText && picked.some((i) => this._blocks[i]
         && this._blocks[i].type !== 'code' && !SOURCE_BLOCKS.includes(this._blocks[i].type));
       const m2 = document.createElement('div');
       m2.className = 'blk-menu';
@@ -1840,7 +1842,9 @@ export class NotePane {
       return;
     }
     const isCodeBlock = Boolean(this._blocks[index] && this._blocks[index].type === 'code');
-    const canColor = Boolean(this._blocks[index] && !isCodeBlock
+    const selNow = window.getSelection();
+    const hasText = Boolean(selNow && !selNow.isCollapsed && String(selNow || ''));
+    const canColor = hasText && Boolean(this._blocks[index] && !isCodeBlock
       && !SOURCE_BLOCKS.includes(this._blocks[index].type));
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
@@ -1934,33 +1938,50 @@ export class NotePane {
     setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
   }
 
-  /** 给整块文字上色；target 可以是单块下标，也可以是选中块数组。 */
-  setBlockColor(target, color) {
-    const idxs = Array.isArray(target) ? target : [target];
-    const c = String(color || '');
-    for (const i of idxs) {
-      const blk = this._blocks[i];
-      if (!blk || blk.type === 'code' || SOURCE_BLOCKS.includes(blk.type)) continue;
-      const txt = this.editableEl(i);
-      if (!txt) continue;
-      let inner = txt.innerHTML;
-      const old = txt.querySelector(':scope > span.fyn-color');
-      if (old) inner = old.innerHTML;
-      if (!inner.trim()) continue;
-      txt.innerHTML = c
-        ? `<span class="fyn-color" data-color="${escapeHtml(c)}" style="color:${escapeHtml(c)}">${inner}</span>`
-        : inner;
-      this.syncInline(i);
+  /** 只给当前选中的文字上色，不再改整块 */
+  setSelectionColor(color) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+    const picked = sel.getRangeAt(0);
+    if (picked.collapsed || !picked.toString()) return false;
+    const c = String(color || 'inherit');
+    const ranges = [];
+    for (const el of this.dom.preview.querySelectorAll('.blk-txt')) {
+      if (!picked.intersectsNode(el)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      if (el.contains(picked.startContainer)) {
+        range.setStart(picked.startContainer, picked.startOffset);
+      } else {
+        range.setStart(el, 0);
+      }
+      if (el.contains(picked.endContainer)) {
+        range.setEnd(picked.endContainer, picked.endOffset);
+      } else {
+        range.setEnd(el, el.childNodes.length);
+      }
+      if (range.collapsed || !range.toString()) continue;
+      ranges.push({ range, index: Number(el.closest('.blk').dataset.i) });
+    }
+    if (!ranges.length) return false;
+    for (const { range, index } of ranges) {
+      const span = document.createElement('span');
+      span.className = 'fyn-color';
+      span.dataset.color = c;
+      span.style.color = c;
+      span.appendChild(range.extractContents());
+      range.insertNode(span);
+      this.syncInline(index);
     }
     this.writeBack();
-    this.renderBlocks();
+    return true;
   }
 
   /** 颜色子菜单：默认 / 灰 / 红 / 橙 / 黄 / 绿 / 蓝 / 紫 */
   openColorSubMenu(target, anchor) {
     if (this._subEl) { this._subEl.remove(); this._subEl = null; }
     const colors = [
-      ['', '默认'],
+      ['inherit', '默认'],
       ['#8b949e', '灰'],
       ['#e06c75', '红'],
       ['#d19a66', '橙'],
@@ -1981,7 +2002,7 @@ export class NotePane {
       const btn = ev.target.closest('button');
       if (!btn) return;
       this.closeBlockMenu();
-      this.setBlockColor(target, btn.dataset.color || '');
+      this.setSelectionColor(btn.dataset.color || 'inherit');
     });
   }
 

@@ -2854,9 +2854,17 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     try {
       f.selectNote(note.id);
       await wait(220);
-      note.content = '彩色文字';
+      note.content = '彩色文字和普通文字';
       f.pane.renderBlocks();
       await wait(160);
+      const txt = document.querySelector('#preview .blk-txt');
+      const textNode = txt.firstChild;
+      const range = document.createRange();
+      range.setStart(textNode, 0);
+      range.setEnd(textNode, 2);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
       f.pane.openBlockContextMenu(0, 120, 160);
       await wait(120);
       const colorBtn = document.querySelector('.blk-menu [data-act="color"]');
@@ -2867,17 +2875,19 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       if (!red) fail('颜色子菜单没有红色');
       red.click();
       await wait(220);
-      if (!note.content.includes('{{color:#e06c75|彩色文字}}')) {
-        fail('颜色没有写回 Markdown：' + note.content);
+      if (!note.content.includes('{{color:#e06c75|彩色}}文字和普通文字')) {
+        fail('选中文字的颜色没有写回 Markdown：' + note.content);
       }
+      if (note.content.includes('{{color:#e06c75|彩色文字和普通文字}}')) fail('颜色仍然作用到整块');
       const colored = document.querySelector('#preview .fyn-color');
-      if (!colored) fail('预览没有渲染颜色');
+      if (!colored || colored.textContent !== '彩色') fail('预览颜色范围不对');
       if (getComputedStyle(colored).color !== 'rgb(224, 108, 117)') {
         fail('颜色显示不对：' + getComputedStyle(colored).color);
       }
       f.pane.renderBlocks();
       await wait(120);
-      if (!document.querySelector('#preview .fyn-color')) fail('重新渲染后颜色丢了');
+      const colored2 = document.querySelector('#preview .fyn-color');
+      if (!colored2 || colored2.textContent !== '彩色') fail('重新渲染后颜色丢了/范围变了');
     } finally {
       f.pane.show(null);
       note.content = original;
