@@ -2848,6 +2848,36 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('Ctrl+1/2/3 把当前块变成对应标题', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '第一块\n\n第二块\n\n第三块';
+      f.pane.renderBlocks();
+      await wait(160);
+      for (let i = 0; i < 3; i += 1) {
+        f.pane.focusBlock(i, 'end');
+        await wait(80);
+        const txt = document.querySelector(`#preview .blk[data-i="${i}"] .blk-txt`);
+        keyOn(txt, String(i + 1), { ctrlKey: true });
+        await wait(160);
+        if (f.pane._blocks[i].type !== 'h' + (i + 1)) {
+          fail(`Ctrl+${i + 1} 没变成标题${i + 1}：` + f.pane._blocks[i].type);
+        }
+      }
+      if (!ws.note(note.id).content.includes('# 第一块')) fail('标题 1 没有写回');
+      if (!ws.note(note.id).content.includes('### 第三块')) fail('标题 3 没有写回');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return 'Ctrl+1/2/3 → h1/h2/h3';
+  });
+
   await run('多块转代码时合并成一个代码块', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

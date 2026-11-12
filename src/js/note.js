@@ -2326,6 +2326,14 @@ export class NotePane {
       return;
     }
     const index = Number(txt.closest('.blk').dataset.i);
+    // Ctrl+1/2/3：当前块（或选中的多块）直接变成对应级别的标题
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && ['1', '2', '3'].includes(e.key)) {
+      e.preventDefault();
+      const type = 'h' + e.key;
+      if (this._sel.size > 1) this.convertBlocks(this.selectedIndexes(), type);
+      else this.convertBlock(index, type);
+      return;
+    }
     // 图片是 contenteditable 里的"原子"，浏览器默认的退格/删除经常不动它，
     // 所以这里自己处理：图片块直接清掉图片，图文混排就删光标旁边那张。
     if ((e.key === 'Backspace' || e.key === 'Delete') && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
