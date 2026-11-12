@@ -2869,6 +2869,11 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       }
       if (!ws.note(note.id).content.includes('# 第一块')) fail('标题 1 没有写回');
       if (!ws.note(note.id).content.includes('### 第三块')) fail('标题 3 没有写回');
+      // 同一快捷键再按一次：标题 1 回退成正文
+      f.pane.focusBlock(0, 'end');
+      keyOn(document.querySelector('#preview .blk[data-i="0"] .blk-txt'), '1', { ctrlKey: true });
+      await wait(180);
+      if (f.pane._blocks[0].type !== 'p') fail('再按 Ctrl+1 没有回退正文：' + f.pane._blocks[0].type);
     } finally {
       f.pane.show(null);
       note.content = original;

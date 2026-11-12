@@ -2330,8 +2330,12 @@ export class NotePane {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && ['1', '2', '3'].includes(e.key)) {
       e.preventDefault();
       const type = 'h' + e.key;
-      if (this._sel.size > 1) this.convertBlocks(this.selectedIndexes(), type);
-      else this.convertBlock(index, type);
+      const targets = this._sel.size > 1 ? this.selectedIndexes() : [index];
+      // 已经是这个标题级别：再按一次切回正文
+      const backToBody = targets.every((i) => this._blocks[i] && this._blocks[i].type === type);
+      const next = backToBody ? 'p' : type;
+      if (targets.length > 1) this.convertBlocks(targets, next);
+      else this.convertBlock(index, next);
       return;
     }
     // 图片是 contenteditable 里的"原子"，浏览器默认的退格/删除经常不动它，
