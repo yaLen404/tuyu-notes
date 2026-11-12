@@ -2883,6 +2883,39 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return 'Ctrl+1/2/3 → h1/h2/h3';
   });
 
+  await run('撤销一次颜色操作能完整恢复文字', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '撤销颜色测试';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.selectBlock(0);
+      f.pane.openBlockContextMenu(0, 120, 160);
+      await wait(100);
+      document.querySelector('.blk-menu [data-act="color"]').click();
+      await wait(80);
+      document.querySelector('.color-sub [data-color="#e06c75"]').click();
+      await wait(180);
+      if (!note.content.includes('#e06c75')) fail('颜色操作没有写回');
+      f.pane.undoNote();
+      await wait(220);
+      if (note.content !== '撤销颜色测试') fail('撤销后内容不对：' + note.content);
+      if (document.querySelector('#preview').textContent.trim() !== '撤销颜色测试') {
+        fail('撤销后文字重复或丢失');
+      }
+      if (document.querySelector('#preview .fyn-color')) fail('撤销后颜色没有清掉');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '颜色一步撤销，文字无重复';
+  });
+
   await run('多块转代码时合并成一个代码块', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
@@ -2954,6 +2987,27 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(120);
       const colored2 = document.querySelector('#preview .fyn-color');
       if (!colored2 || colored2.textContent !== '彩色') fail('重新渲染后颜色丢了/范围变了');
+
+      // 选回已染色的文字 → 默认色，必须能覆盖掉原来的红色
+      const r2 = document.createRange();
+      r2.selectNodeContents(colored2);
+      const s2 = window.getSelection();
+      s2.removeAllRanges();
+      s2.addRange(r2);
+      f.pane.openBlockContextMenu(0, 120, 160);
+      await wait(100);
+      document.querySelector('.blk-menu [data-act="color"]').click();
+      await wait(80);
+      const def = document.querySelector('.color-sub [data-color="inherit"]');
+      if (!def) fail('颜色子菜单没有默认色');
+      def.click();
+      await wait(180);
+      if (document.querySelector('#preview .fyn-color')) {
+        fail('默认色没有清除旧颜色：' + note.content + ' / ' + document.querySelector('#preview').innerHTML);
+      }
+      if (!note.content.includes('彩色文字和普通文字') || note.content.includes('{{color:')) {
+        fail('默认色没有从 Markdown 清掉：' + note.content);
+      }
     } finally {
       f.pane.show(null);
       note.content = original;
