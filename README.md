@@ -54,7 +54,7 @@
 ## Windows 安装
 
 从 [Releases](https://github.com/yaLen404/tuyu-notes/releases) 下载
-`TuyuNotes-Setup-1.0.2B.exe`，双击安装即可：
+`TuyuNotes-Setup-1.0.21.exe`，双击安装即可：
 
 - 64 位 Windows 10 / 11；
 - 安装时可选择目录，默认创建桌面和开始菜单「图屿笔记」快捷方式；
@@ -81,7 +81,7 @@ npm install
 npm run dist
 ```
 
-产物在 `dist\TuyuNotes-Setup-1.0.2B.exe`。
+产物在 `dist\TuyuNotes-Setup-1.0.21.exe`。
 
 ## 数据放在哪
 
