@@ -2848,6 +2848,53 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('表格就地编辑、Tab 跳格和自动加行', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+      f.pane.renderBlocks();
+      await wait(200);
+      const tableBlock = document.querySelector('#preview .blk-table');
+      if (!tableBlock) fail('表格没有渲染成可编辑网格');
+      if (tableBlock.dataset.kind !== 'table') fail('表格还是源码块');
+      if (!tableBlock.querySelector('.note-table')) fail('没有表格网格');
+      const cells = [...tableBlock.querySelectorAll('th, td')];
+      if (cells.length !== 4) fail('单元格数量不对：' + cells.length);
+
+      f.pane.focusTableCell(cells[0], 'end');
+      cells[0].textContent = 'A2';
+      cells[0].dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'A2' }));
+      await wait(160);
+      if (!note.content.startsWith('| A2 | B |')) fail('单元格编辑没有写回：' + note.content);
+
+      f.pane.focusTableCell(cells[0], 'end');
+      keyOn(cells[0], 'Tab');
+      await wait(80);
+      const sel = window.getSelection();
+      const anchorEl = sel.anchorNode && (sel.anchorNode.nodeType === 1
+        ? sel.anchorNode : sel.anchorNode.parentElement);
+      const inSecond = anchorEl && anchorEl.closest('th, td') === cells[1];
+      if (!inSecond) fail('Tab 没有跳到下一个单元格');
+
+      f.pane.focusTableCell(cells[3], 'end');
+      keyOn(cells[3], 'Tab');
+      await wait(220);
+      if (document.querySelectorAll('#preview .note-table tr').length !== 3) {
+        fail('最后一个单元格 Tab 没有新增一行');
+      }
+      if (note.content.trim().split('\n').length !== 4) fail('新增行没有写回：' + note.content);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '网格编辑 / Tab 跳格 / 末尾加行';
+  });
+
   await run('Ctrl+1/2/3 把当前块变成对应标题', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

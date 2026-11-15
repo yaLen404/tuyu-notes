@@ -390,6 +390,27 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .preview table { border-collapse: collapse; margin: 0 0 12px; font-size: 14px; }
 .preview th, .preview td { border: 1px solid var(--line); padding: 4px 10px; }
 .preview th { background: var(--head); font-weight: 600; }
+
+/* 表格块：直接在网格里编辑 */
+.blk-table { margin: 4px 0 10px; }
+.blk-table .table-wrap { overflow-x: auto; border-radius: 7px; }
+.blk-table .note-table {
+  width: 100%; min-width: 280px; border-collapse: collapse; margin: 0;
+  background: transparent;
+}
+.blk-table .note-table th,
+.blk-table .note-table td {
+  min-width: 64px; padding: 7px 10px; vertical-align: top;
+  border: 1px solid var(--line); white-space: normal; word-break: break-word;
+}
+.blk-table .note-table th { background: var(--head); font-weight: 600; }
+.blk-table .note-table th, .blk-table .note-table td {
+  letter-spacing: var(--note-letter-spacing, .12em);
+}
+.blk-table .note-table .latin { letter-spacing: 0; }
+.blk-table .note-table td:focus-within,
+.blk-table .note-table th:focus-within { background: rgba(139, 92, 246, .08); }
+.blk-table .latin { letter-spacing: 0; }
 .preview .wl { color: #9db8ff; text-decoration: none; cursor: pointer; }
 .preview .wl:hover { text-decoration: underline; }
 .preview .wl.missing { color: #e9973f; }

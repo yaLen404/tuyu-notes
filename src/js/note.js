@@ -9,7 +9,7 @@
  */
 
 import {
-  parseBlocks, blockToLines, blockToHtml, htmlToInline, escapeHtml,
+  parseBlocks, blockToLines, blockToHtml, htmlToInline, inline, escapeHtml,
 } from './markdown.js';
 import {
   INDENT_UNIT, TAB_CHAR, detectLanguage, highlight, normalizeLang, searchLanguages,
@@ -277,6 +277,10 @@ export class NotePane {
     if (block.type === 'empty' && this._blocks.length === 1) cls.push('is-only');
     if (this._sel && this._sel.has(i)) cls.push('sel');
     const pad = block.depth ? ` style="margin-left:${block.depth * 20}px"` : '';
+    if (block.type === 'table') {
+      return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="table"${pad}>`
+        + '<div class="table-wrap">' + this.tableHtml(block, exists) + '</div></div>';
+    }
     if (block.type === 'code') {
       return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="code" data-lang="${escapeHtml(block.lang || '')}"${pad}>`
         + this.codeEditorHtml() + '</div>';
@@ -298,6 +302,167 @@ export class NotePane {
     return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="inline"${pad}>`
       + marker
       + `<div class="blk-txt"${ce}>${blockToHtml(block, exists)}</div></div>`;
+  }
+
+  /** 表格源码 ↔ 行 / 对齐 */
+  tableData(src) {
+    const split = (line) => {
+      let s = String(line || '').trim();
+      if (s.startsWith('|')) s = s.slice(1);
+      if (s.endsWith('|')) s = s.slice(0, -1);
+      const cells = [];
+      let cur = '';
+      for (let i = 0; i < s.length; i += 1) {
+        if (s[i] === '\\' && s[i + 1] === '|') { cur += '|'; i += 1; continue; }
+        if (s[i] === '|') { cells.push(cur.trim()); cur = ''; continue; }
+        cur += s[i];
+      }
+      cells.push(cur.trim());
+      return cells;
+    };
+    const lines = String(src || '').split('\n').filter((l) => l.trim());
+    const all = lines.map(split);
+    if (!all.length) return { rows: [['列 1', '列 2']], aligns: ['', ''] };
+    const sep = all[1] || [];
+    const aligns = sep.map((s) => {
+      const left = s.startsWith(':');
+      const right = s.endsWith(':');
+      return left && right ? 'center' : (right ? 'right' : (left ? 'left' : ''));
+    });
+    const rows = all.filter((_, i) => i !== 1);
+    return { rows, aligns: rows[0].map((_, i) => aligns[i] || '') };
+  }
+
+  tableSrc(rows, aligns) {
+    const clean = (c) => String(c == null ? '' : c).replace(/\n/g, ' ').replace(/\|/g, '\\|').trim();
+    const line = (cells) => '| ' + cells.map(clean).join(' | ') + ' |';
+    const sep = (aligns || []).map((a) => (a === 'center' ? ':---:' : a === 'right' ? '---:' : a === 'left' ? ':---' : '---'));
+    const head = rows[0] || [];
+    const body = rows.slice(1);
+    const width = Math.max(head.length, ...body.map((r) => r.length), 1);
+    const pad = (r) => Array.from({ length: width }, (_, i) => r[i] || '');
+    return [line(pad(head)), '| ' + sep.slice(0, width).map((s) => s || '---').join(' | ') + ' |',
+      ...body.map((r) => line(pad(r)))].join('\n');
+  }
+
+  tableHtml(block, exists) {
+    const data = this.tableData(block.src);
+    const rows = data.rows && data.rows.length ? data.rows : [['列 1', '列 2']];
+    let html = '<table class="note-table"><thead>';
+    rows.forEach((row, ri) => {
+      const tag = ri === 0 ? 'th' : 'td';
+      if (ri === 1) html += '</thead><tbody>';
+      html += '<tr>' + row.map((cell, ci) => {
+        const al = data.aligns[ci] ? ` style="text-align:${data.aligns[ci]}"` : '';
+        return `<${tag} data-r="${ri}" data-c="${ci}"${al}>${inline(cell, exists)}</${tag}>`;
+      }).join('') + '</tr>';
+    });
+    if (rows.length === 1) html += '</thead><tbody>';
+    return html + '</tbody></table>';
+  }
+
+  tableCells(index) {
+    const el = this.blkEl(index);
+    return el ? [...el.querySelectorAll('.note-table th, .note-table td')] : [];
+  }
+
+  focusTableCell(cell, where = 'start') {
+    if (!cell) return false;
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(where === 'start');
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    if (document.activeElement !== this.dom.preview) this.dom.preview.focus();
+    this.markCurrent(cell.closest('.blk'));
+    return true;
+  }
+
+  focusTable(index, where = 'start') {
+    const cells = this.tableCells(index);
+    if (!cells.length) return false;
+    this.focusTableCell(where === 'end' ? cells[cells.length - 1] : cells[0], where);
+    this._focus = index;
+    this._lastEdit = index;
+    return true;
+  }
+
+  syncTableFromDom(index) {
+    const blk = this._blocks[index];
+    const el = this.blkEl(index);
+    if (!blk || blk.type !== 'table' || !el) return;
+    const table = el.querySelector('table');
+    if (!table) return;
+    const rows = [...table.querySelectorAll('tr')].map((tr) =>
+      [...tr.querySelectorAll('th, td')].map((cell) =>
+        htmlToInline(cell.innerHTML).replace(/\s+/g, ' ').trim()));
+    if (!rows.length) return;
+    blk.src = this.tableSrc(rows, this.tableData(blk.src).aligns);
+    this.writeBack();
+  }
+
+  addTableRow(index) {
+    const el = this.blkEl(index);
+    const table = el && el.querySelector('table');
+    if (!table) return null;
+    const first = table.rows[0];
+    const count = first ? first.cells.length : 1;
+    const tbody = table.tBodies[0] || table.createTBody();
+    const tr = document.createElement('tr');
+    for (let i = 0; i < count; i += 1) {
+      const td = document.createElement('td');
+      td.dataset.c = String(i);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+    this.syncTableFromDom(index);
+    return tr.cells[0] || null;
+  }
+
+  onTableKey(e, index) {
+    const cell = (e.target.closest && e.target.closest('.note-table th, .note-table td'))
+      || (window.getSelection().anchorNode
+        && window.getSelection().anchorNode.parentElement
+        && window.getSelection().anchorNode.parentElement.closest('.note-table th, .note-table td'));
+    if (!cell) return;
+    const table = cell.closest('table');
+    const cells = [...table.querySelectorAll('th, td')];
+    const pos = cells.indexOf(cell);
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        if (pos <= 0) { this.focusBlock(index - 1, 'end'); return; }
+        this.focusTableCell(cells[pos - 1], 'end');
+        return;
+      }
+      if (pos >= cells.length - 1) {
+        const first = this.addTableRow(index);
+        if (first) this.focusTableCell(first, 'start');
+      } else {
+        this.focusTableCell(cells[pos + 1], 'start');
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) { this.appendAfter(index); return; }
+      const col = cell.cellIndex;
+      const row = cell.parentElement;
+      let next = row.nextElementSibling;
+      if (!next) {
+        const first = this.addTableRow(index);
+        next = first && first.parentElement;
+      }
+      if (next && next.cells[col]) this.focusTableCell(next.cells[col], 'end');
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (this._blocks[index + 1]) this.focusBlock(index + 1, 'start');
+      else this.appendAfter(index);
+    }
   }
 
   /** 代码块：高亮层垫底 + 透明文字的 textarea 在上，看起来是"直接在代码上打字" */
@@ -535,6 +700,7 @@ export class NotePane {
     const el = this.blkEl(index);
     if (!el) return false;
     if (el.dataset.kind === 'source') { this.openSource(index); return true; }
+    if (el.dataset.kind === 'table') { this.focusTable(index, 'start'); return true; }
     if (el.dataset.kind === 'code') { this.focusCode(index, 'end'); return true; }
     const r = el.getBoundingClientRect();
     const px = Math.min(Math.max(x, r.left + 1), r.right - 1);
@@ -995,6 +1161,12 @@ export class NotePane {
       if (target.classList.contains('code-input')) { this.onCodeInput(target); return; }
       if (target.classList.contains('code-lang')) { this.filterLangMenu(target.value); return; }
     }
+    const tableEl = (target && target.closest && target.closest('.blk-table'))
+      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.blk-table'));
+    if (tableEl) {
+      this.syncTableFromDom(Number(tableEl.dataset.i));
+      return;
+    }
     // 单宿主下真实输入的 target 是 #preview，不是里面的 .blk-txt；
     // 合成事件 / 旧路径才直接落在 .blk-txt 上。
     let txt = target && target.closest ? target.closest('.blk-txt') : null;
@@ -1240,6 +1412,10 @@ export class NotePane {
       this.focusCode(index, where);
       return;
     }
+    if (blk.type === 'table') {
+      this.focusTable(index, where);
+      return;
+    }
     if (SOURCE_BLOCKS.includes(blk.type)) {
       this.openSource(index);
       return;
@@ -1374,7 +1550,8 @@ export class NotePane {
     if (type === 'math') blk.src = text;
     this.writeBack();
     this.renderBlocks();
-    if (SOURCE_BLOCKS.includes(type)) this.openSource(index);
+    if (type === 'table') this.focusTable(index, 'start');
+    else if (SOURCE_BLOCKS.includes(type)) this.openSource(index);
     else this.focusBlock(index, 'end');
   }
 
@@ -1523,6 +1700,13 @@ export class NotePane {
       return;
     }
     if (blk.dataset.kind === 'source') { this.openSource(index); return; }
+    if (blk.dataset.kind === 'table') {
+      // 浏览器点击单元格时已经放好光标，这里只记录当前块
+      this._focus = index;
+      this._lastEdit = index;
+      this.markCurrent(blk);
+      return;
+    }
     // 富文本块：把光标放进去（真实点击时浏览器已经放过，这里兜底）
     const txt = blk.querySelector('.blk-txt');
     if (txt) {
@@ -2354,6 +2538,12 @@ export class NotePane {
         ta.selectionStart = ta.selectionEnd = start + 2;
         this.onSourceInput({ target: ta });
       }
+      return;
+    }
+    const tableEl = (e.target.closest && e.target.closest('.blk-table'))
+      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.blk-table'));
+    if (tableEl) {
+      this.onTableKey(e, Number(tableEl.dataset.i));
       return;
     }
     if (!txt) {
