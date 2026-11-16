@@ -475,7 +475,7 @@ export class NotePane {
       + ' autocomplete="off" autocorrect="off" aria-label="代码"></textarea>'
       + '</div></div>'
       + '<div class="code-foot"><input class="code-lang" type="text" spellcheck="false"'
-      + ' autocomplete="off" placeholder="纯文本" title="代码语言" aria-label="代码语言"></div>';
+      + ' autocomplete="off" placeholder="text" title="代码语言" aria-label="代码语言"></div>';
   }
 
   codeInput(index) {
@@ -3066,7 +3066,7 @@ export class NotePane {
     const menu = this._langMenu;
     if (!menu) return;
     menu.innerHTML = this._langFiltered.map((lang, i) => {
-      const label = lang || '纯文本';
+      const label = lang || 'text';
       const cls = [i === this._langIndex ? 'active' : '', lang ? '' : 'lang-none']
         .filter(Boolean).join(' ');
       return `<button data-lang="${escapeHtml(lang)}" class="${cls}">${escapeHtml(label)}</button>`;

@@ -2706,6 +2706,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     if (ta.value !== 'const a = 1;\nconsole.log(a);') fail('输入框文本不对：' + ta.value);
     if (blk.querySelectorAll('.code-gutter div').length !== 2) fail('行号数量不对');
     if (lang.value !== 'js') fail('语言框没显示 js：' + lang.value);
+    if (lang.placeholder !== 'text') fail('空语言框占位不是 text：' + lang.placeholder);
     if (!/tok-kw/.test(blk.querySelector('.code-hl').innerHTML)) fail('没有语法着色');
 
     // 输入：DOM 不重建，note.content 立刻更新
