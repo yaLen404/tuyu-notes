@@ -3213,6 +3213,40 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '左右两边都能插图';
   });
 
+  await run('剪切下来的图片引用可以粘到中线块右侧', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左边';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      f.pane.focusSplitSide(0, 'right', 'end');
+      const right = document.querySelector('#preview .split-right .split-txt');
+      const dt = new DataTransfer();
+      dt.setData('text/plain', '![[img-paste-side.png]]');
+      right.dispatchEvent(new ClipboardEvent('paste', {
+        bubbles: true, cancelable: true, clipboardData: dt,
+      }));
+      await wait(300);
+      if (!f.pane._blocks[0].right.inline.includes('img-paste-side.png')) {
+        fail('粘贴没有写进右侧：' + f.pane._blocks[0].right.inline);
+      }
+      if (f.pane._blocks[0].left.inline.includes('img-paste-side.png')) fail('粘贴跑到了左侧');
+      if (!document.querySelector('#preview .split-right img.note-img')) fail('右侧没有渲染粘贴的图片');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      f.pane.renderBlocks();
+      await wait(160);
+    }
+    return '剪切引用粘贴到右侧并渲染';
+  });
+
   await run('拖动中线调整左右宽度并保存', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

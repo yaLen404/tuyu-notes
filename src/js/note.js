@@ -1754,6 +1754,8 @@ export class NotePane {
   insertIntoEditable(text) {
     const el = this.activeEditor();
     if (!el) return false;
+    const side = (el.closest && el.closest('.split-side')) || this.activeSplitSide();
+    if (side) return this.insertIntoSplitSide(side, text);
     if (el.tagName === 'TEXTAREA') {
       const start = el.selectionStart == null ? el.value.length : el.selectionStart;
       el.value = el.value.slice(0, start) + text + el.value.slice(el.selectionEnd == null ? start : el.selectionEnd);
@@ -3822,6 +3824,16 @@ export class NotePane {
     if (!this.note) return;
     const file = this.imageFileOf(e.clipboardData);
     if (file) { e.preventDefault(); this.attachImage(file); return; }
+    const sideEl = (e.target.closest && e.target.closest('.split-side'))
+      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
+    if (sideEl) {
+      // 代码 / 公式 / 表格侧栏是 textarea，让浏览器自己粘贴，input 事件再写回
+      if (e.target.classList && e.target.classList.contains('split-source')) return;
+      e.preventDefault();
+      const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+      if (text) this.insertIntoSplitSide(sideEl, text);
+      return;
+    }
     // 富文本块里只接受纯文本，别把外部的花样式带进来
     let txt = e.target.closest && e.target.closest('.blk-txt');
     if (!txt && e.target === this.dom.preview) {
