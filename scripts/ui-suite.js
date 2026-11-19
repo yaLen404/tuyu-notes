@@ -3068,6 +3068,17 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(180);
       if (f.pane._blocks[0].left.inline !== '左独立') fail('编辑右侧时改到了左侧：' + f.pane._blocks[0].left.inline);
       if (f.pane._blocks[0].right.inline !== '右侧打字') fail('右侧输入没有写回：' + f.pane._blocks[0].right.inline);
+      // 普通输入不应重建整个中线块
+      const origRender = f.pane.renderBlocks.bind(f.pane);
+      let renders = 0;
+      f.pane.renderBlocks = (...args) => { renders += 1; return origRender(...args); };
+      right.textContent = '右侧再输入';
+      document.getElementById('preview').dispatchEvent(new InputEvent('input', {
+        bubbles: true, inputType: 'insertText', data: '右侧再输入',
+      }));
+      await wait(160);
+      f.pane.renderBlocks = origRender;
+      if (renders !== 0) fail('右侧普通输入重建了整个块：' + renders);
       right.textContent = '右独立';
       right.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右独立' }));
       await wait(160);

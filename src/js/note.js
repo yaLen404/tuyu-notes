@@ -201,6 +201,7 @@ export class NotePane {
       return;
     }
     const exists = (t) => Boolean(this.ws.findTitle(t, note.graph));
+    this._existsFn = exists;
     let blocks = parseBlocks(note.content || '');
     if (!blocks.length) blocks = [{ type: 'empty', start: 0, end: 0, inline: '' }];
     // 重排前记住代码块里的光标：撤销 / 改块类型之后不把用户扔到别处。
@@ -471,8 +472,7 @@ export class NotePane {
     }
     block[side] = s;
     this.writeBack();
-    this.renderBlocks();
-    this.focusSplitSide(index, side, 'end');
+    this.refreshSplitSide(index, side, 'end');
   }
 
   openSplitSideMenu(index, side, x, y) {
@@ -534,8 +534,7 @@ export class NotePane {
     else s.inline = '';
     block[side] = s;
     this.writeBack({ forceHistory: true });
-    this.renderBlocks();
-    this.focusSplitSide(index, side, 'end');
+    this.refreshSplitSide(index, side, 'end');
   }
 
   async pasteSplitSide(index, side) {
@@ -1555,6 +1554,23 @@ export class NotePane {
     }
   }
 
+  /** 只重画中线块的一侧，避免动一下侧栏就重建整篇笔记 */
+  refreshSplitSide(index, side, where = 'end') {
+    const block = this._blocks[index];
+    const blockEl = this.blkEl(index);
+    if (!block || block.type !== 'split' || !blockEl) return false;
+    const old = blockEl.querySelector(`.split-side[data-side="${side}"]`);
+    if (!old) return false;
+    const holder = document.createElement('div');
+    holder.innerHTML = this.splitSideHtml(block, side, index, this._existsFn || (() => true));
+    const fresh = holder.firstElementChild;
+    if (!fresh) return false;
+    old.replaceWith(fresh);
+    this.markSplitSide(fresh);
+    this.focusSplitSide(index, side, where);
+    return true;
+  }
+
   markSplitSide(sideEl) {
     const block = sideEl && sideEl.closest && sideEl.closest('.blk-split');
     if (!block) return;
@@ -2226,7 +2242,7 @@ export class NotePane {
           s.done = !s.done;
           block[side] = s;
           this.writeBack({ forceHistory: true });
-          this.renderBlocks();
+          this.refreshSplitSide(index, side, 'end');
         }
         return;
       }
@@ -4127,8 +4143,7 @@ export class NotePane {
     const index = blockEl ? Number(blockEl.dataset.i) : -1;
     const side = sideEl.dataset.side;
     this.syncSplitSide(sideEl);
-    this.renderBlocks();
-    if (index >= 0) this.focusSplitSide(index, side, 'end');
+    if (index >= 0) this.refreshSplitSide(index, side, 'end');
     return true;
   }
 
