@@ -3068,6 +3068,19 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
         clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
       }));
       await wait(160);
+      const sideActions = [...document.querySelectorAll('.blk-menu [data-act^="split-"]')]
+        .map((b) => b.dataset.act);
+      for (const a of ['split-cut', 'split-copy', 'split-paste', 'split-select', 'split-color']) {
+        if (!sideActions.includes(a)) fail('中线块菜单缺少：' + a);
+      }
+      const colorBtn = document.querySelector('.blk-menu [data-act="split-color"]');
+      colorBtn.click();
+      await wait(120);
+      const red = document.querySelector('.blk-menu.sub [data-color="#e06c75"]');
+      if (!red) fail('中线块没有颜色子菜单');
+      red.click();
+      await wait(180);
+      if (!document.querySelector('#preview .split-right .fyn-color')) fail('中线块侧栏没有上色');
       right.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true, cancelable: true,
         clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),

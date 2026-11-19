@@ -478,8 +478,13 @@ export class NotePane {
     this.closeBlockMenu();
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
-    menu.innerHTML = '<button data-act="split-copy">复制这一侧</button>'
+    menu.innerHTML = '<button data-act="split-cut">剪切这一侧</button>'
+      + '<button data-act="split-copy">复制这一侧</button>'
+      + '<button data-act="split-paste">粘贴到这一侧</button>'
+      + '<button data-act="split-select">全选这一侧</button>'
+      + '<div class="sep"></div>'
       + '<button data-act="split-type" class="has-sub">块的格式<span class="sub-arrow">▸</span></button>'
+      + '<button data-act="split-color" class="has-sub">颜色<span class="sub-arrow">▸</span></button>'
       + '<button data-act="split-del">删除中线块</button>';
     this.placeMenu(menu, x, y);
     this._menuEl = menu;
@@ -488,12 +493,18 @@ export class NotePane {
       const btn = ev.target.closest('button');
       if (!btn) return;
       if (btn.dataset.act === 'split-type') { this.openSplitTypeSubMenu(index, side, btn); return; }
+      if (btn.dataset.act === 'split-color') { this.openSplitColorSubMenu(index, side, btn); return; }
       this.closeBlockMenu();
-      if (btn.dataset.act === 'split-copy') this.copySplitSide(index, side);
+      if (btn.dataset.act === 'split-cut') this.cutSplitSide(index, side);
+      else if (btn.dataset.act === 'split-copy') this.copySplitSide(index, side);
+      else if (btn.dataset.act === 'split-paste') this.pasteSplitSide(index, side);
+      else if (btn.dataset.act === 'split-select') this.selectSplitSide(index, side);
       else if (btn.dataset.act === 'split-del') this.removeBlock(index);
     });
     const typeBtn = menu.querySelector('[data-act="split-type"]');
     typeBtn.addEventListener('mouseenter', () => this.openSplitTypeSubMenu(index, side, typeBtn));
+    const colorBtn = menu.querySelector('[data-act="split-color"]');
+    colorBtn.addEventListener('mouseenter', () => this.openSplitColorSubMenu(index, side, colorBtn));
     setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
   }
 
@@ -511,6 +522,132 @@ export class NotePane {
     const clip = window.tuyu && window.tuyu.clipboard;
     if (clip) await clip.write(text);
     return true;
+  }
+
+  async cutSplitSide(index, side) {
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split') return;
+    await this.copySplitSide(index, side);
+    const s = this.splitSideData(block[side]);
+    if (['code', 'math', 'table'].includes(s.type)) s.src = '';
+    else s.inline = '';
+    block[side] = s;
+    this.writeBack({ forceHistory: true });
+    this.renderBlocks();
+    this.focusSplitSide(index, side, 'end');
+  }
+
+  async pasteSplitSide(index, side) {
+    const clip = window.tuyu && window.tuyu.clipboard;
+    if (!clip) return;
+    const text = await clip.read();
+    if (!text) return;
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split') return;
+    const s = this.splitSideData(block[side]);
+    const sideEl = this.blkEl(index) && this.blkEl(index).querySelector(`.split-side[data-side="${side}"]`);
+    if (['code', 'math', 'table'].includes(s.type)) {
+      const src = sideEl && sideEl.querySelector('.split-source');
+      if (!src) return;
+      const start = src.selectionStart == null ? src.value.length : src.selectionStart;
+      const end = src.selectionEnd == null ? start : src.selectionEnd;
+      src.value = src.value.slice(0, start) + text + src.value.slice(end);
+      src.selectionStart = src.selectionEnd = start + text.length;
+      s.src = src.value;
+      block[side] = s;
+      this.writeBack();
+      return;
+    }
+    if (!sideEl) return;
+    this.focusSplitSide(index, side, 'end');
+    const txt = sideEl.querySelector('.split-txt');
+    if (!txt) return;
+    const range = document.createRange();
+    range.selectNodeContents(txt);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    this.insertIntoSplitSide(sideEl, text);
+  }
+
+  selectSplitSide(index, side) {
+    const sideEl = this.blkEl(index) && this.blkEl(index).querySelector(`.split-side[data-side="${side}"]`);
+    if (!sideEl) return;
+    const src = sideEl.querySelector('.split-source');
+    if (src) { src.focus(); src.select(); return; }
+    const txt = sideEl.querySelector('.split-txt');
+    if (!txt) return;
+    const range = document.createRange();
+    range.selectNodeContents(txt);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    this.markCurrent(sideEl.closest('.blk'));
+  }
+
+  openSplitColorSubMenu(index, side, anchor) {
+    if (this._subEl) { this._subEl.remove(); this._subEl = null; }
+    const colors = [
+      ['inherit', '默认'], ['#8b949e', '灰'], ['#e06c75', '红'], ['#d19a66', '橙'],
+      ['#e5c07b', '黄'], ['#98c379', '绿'], ['#61afef', '蓝'], ['#c678dd', '紫'],
+    ];
+    const sub = document.createElement('div');
+    sub.className = 'blk-menu slash sub color-sub';
+    sub.innerHTML = colors.map(([c, label]) => {
+      const none = c === 'inherit';
+      return `<button data-color="${c}"><span class="color-dot${none ? ' none' : ''}"`
+        + `${none ? '' : ` style="background:${c}"`}></span>${label}</button>`;
+    }).join('');
+    this.placeSubMenu(sub, anchor);
+    this._subEl = sub;
+    sub.addEventListener('mousedown', (ev) => ev.preventDefault());
+    sub.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button');
+      if (!btn) return;
+      this.closeBlockMenu();
+      this.setSplitSideColor(index, side, btn.dataset.color || 'inherit');
+    });
+  }
+
+  setSplitSideColor(index, side, color) {
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split') return;
+    const s = this.splitSideData(block[side]);
+    if (['code', 'math', 'table', 'hr'].includes(s.type)) return;
+    const sideEl = this.blkEl(index) && this.blkEl(index).querySelector(`.split-side[data-side="${side}"]`);
+    const txt = sideEl && sideEl.querySelector('.split-txt');
+    if (!txt) return;
+    const raw = String(color || 'inherit');
+    const isDefault = raw === 'inherit' || raw === '';
+    const c = isDefault ? '#dcddde' : raw;
+    const sel = window.getSelection();
+    const hasSel = sel && !sel.isCollapsed && sel.rangeCount && txt.contains(sel.anchorNode);
+    if (isDefault) {
+      const wrappers = [...txt.querySelectorAll('.fyn-color')].filter((span) =>
+        !hasSel || sel.getRangeAt(0).intersectsNode(span));
+      for (const span of wrappers) span.replaceWith(...span.childNodes);
+    } else if (hasSel) {
+      const picked = sel.getRangeAt(0);
+      const range = document.createRange();
+      range.selectNodeContents(txt);
+      if (txt.contains(picked.startContainer)) range.setStart(picked.startContainer, picked.startOffset);
+      if (txt.contains(picked.endContainer)) range.setEnd(picked.endContainer, picked.endOffset);
+      if (!range.collapsed) {
+        const span = document.createElement('span');
+        span.className = 'fyn-color';
+        span.dataset.color = c;
+        span.style.color = c;
+        span.appendChild(range.extractContents());
+        range.insertNode(span);
+      }
+    } else {
+      const inner = txt.innerHTML;
+      if (!inner.trim()) return;
+      txt.innerHTML = `<span class="fyn-color" data-color="${c}" style="color:${c}">${inner}</span>`;
+    }
+    this.syncSplitSide(sideEl);
+    this.writeBack({ forceHistory: true });
   }
 
   openSplitTypeSubMenu(index, side, anchor) {
