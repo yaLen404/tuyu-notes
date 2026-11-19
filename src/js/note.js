@@ -3659,7 +3659,8 @@ export class NotePane {
     const file = this.imageFileOf(e.dataTransfer);
     if (!file) return;
     e.preventDefault();
-    this.attachImage(file);
+    this._dropSplitSide = e.target.closest && e.target.closest('.split-side');
+    Promise.resolve(this.attachImage(file)).finally(() => { this._dropSplitSide = null; });
   }
 
   // ---------------------------------------------------------------- 手柄 / 菜单
@@ -3836,10 +3837,52 @@ export class NotePane {
     if (this.hooks.onImage) this.hooks.onImage(name);
   }
 
+  /** 当前光标/拖放落点所在的中线块半边 */
+  activeSplitSide() {
+    if (this._dropSplitSide && this._dropSplitSide.isConnected) return this._dropSplitSide;
+    const active = document.activeElement;
+    const own = active && active.closest && active.closest('.split-side');
+    if (own) return own;
+    const sel = window.getSelection();
+    const node = sel && sel.anchorNode;
+    const el = node && (node.nodeType === 1 ? node : node.parentElement);
+    return el && el.closest ? el.closest('.split-side') : null;
+  }
+
+  insertIntoSplitSide(sideEl, text) {
+    const txt = sideEl && sideEl.querySelector('.split-txt');
+    if (!txt) return false;
+    const sel = window.getSelection();
+    let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+    if (!range || !txt.contains(range.startContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(txt);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    const blockEl = sideEl.closest('.blk-split');
+    const index = blockEl ? Number(blockEl.dataset.i) : -1;
+    const side = sideEl.dataset.side;
+    this.syncSplitSide(sideEl);
+    this.renderBlocks();
+    if (index >= 0) this.focusSplitSide(index, side, 'end');
+    return true;
+  }
+
   /** 在当前光标处插入一段文本（图片引用等）。富文本块里插的是 markdown 片段。 */
   insertText(text) {
     const el = this.activeEditor();
     if (!el) return;
+    const side = this.activeSplitSide() || (el.closest && el.closest('.split-side'));
+    if (side) { this.insertIntoSplitSide(side, text); return; }
     if (el.tagName === 'TEXTAREA') {
       const start = el.selectionStart == null ? el.value.length : el.selectionStart;
       const end = el.selectionEnd == null ? start : el.selectionEnd;

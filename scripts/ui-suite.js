@@ -3102,6 +3102,43 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '左右独立 / 右侧转 h2 / 重排保留';
   });
 
+  await run('中线块左右两边都能插入图片', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左\n\n右';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      f.pane.focusSplitSide(0, 'left', 'end');
+      const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      await f.pane.attachImage(new File([bytes], 'split.png', { type: 'image/png' }));
+      await wait(300);
+      let leftImg = document.querySelector('#preview .split-left img.note-img');
+      if (!leftImg) fail('中线块左侧没有插入图片');
+      f.pane.focusSplitSide(0, 'right', 'end');
+      await f.pane.attachImage(new File([bytes], 'split2.png', { type: 'image/png' }));
+      await wait(300);
+      let rightImg = document.querySelector('#preview .split-right img.note-img');
+      if (!rightImg) fail('中线块右侧没有插入图片');
+      f.pane.renderBlocks();
+      await wait(200);
+      leftImg = document.querySelector('#preview .split-left img.note-img');
+      rightImg = document.querySelector('#preview .split-right img.note-img');
+      if (!leftImg || !rightImg) fail('重排后中线块图片丢了');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '左右两边都能插图';
+  });
+
   await run('Ctrl+1/2/3 把当前块变成对应标题', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
