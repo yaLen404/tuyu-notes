@@ -173,6 +173,21 @@ const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
 const TASK = /^(\s*)[-*+]\s+\[([ xX])\]\s+(.*)$/;
 const QUOTE = /^\s*>\s?(.*)$/;
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+const SPLIT_LINE = /^\s*<!--fyn-split:([^>]+)-->\s*$/;
+const SPLIT_TYPES = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote'];
+function splitMarker(block) {
+  const clean = (s) => {
+    const side = s && typeof s === 'object' ? s : {};
+    return {
+      type: SPLIT_TYPES.includes(side.type) ? side.type : 'p',
+      inline: String(side.inline || ''),
+      ...(side.depth ? { depth: side.depth } : {}),
+      ...(side.type === 'task' ? { done: Boolean(side.done) } : {}),
+    };
+  };
+  const payload = { left: clean(block.left), right: clean(block.right) };
+  return '<!--fyn-split:' + encodeURIComponent(JSON.stringify(payload)) + '-->';
+}
 
 function splitRow(line) {
   let s = line.trim();
@@ -209,6 +224,21 @@ export function renderBlocks(md, exists = () => true) {
       }
       i = j;
       continue;
+    }
+
+    const splitMatch = SPLIT_LINE.exec(line);
+    if (splitMatch) {
+      try {
+        const data = JSON.parse(decodeURIComponent(splitMatch[1]));
+        const side = (s) => (s && s.inline ? inline(String(s.inline), exists) : '');
+        out.push({
+          start, end: i + 1,
+          html: '<div class="split-card-preview"><div>' + side(data.left)
+            + '</div><i></i><div>' + side(data.right) + '</div></div>',
+        });
+        i += 1;
+        continue;
+      } catch (_e) { /* 坏标记按普通段落处理 */ }
     }
 
     // $$ ... $$ 独立公式块（可以跨行）
@@ -349,6 +379,17 @@ export function render(md, exists = () => true) {
 export function plainLines(md, limit = 12) {
   const out = [];
   for (const raw of String(md == null ? '' : md).replace(/\r\n?/g, '\n').split('\n')) {
+    const splitMatch = SPLIT_LINE.exec(raw);
+    if (splitMatch) {
+      try {
+        const data = JSON.parse(decodeURIComponent(splitMatch[1]));
+        const text = [data.left && data.left.inline, data.right && data.right.inline]
+          .filter(Boolean).join(' ');
+        if (text) out.push(String(text).replace(/\s{2,}/g, ' ').trim());
+        if (out.length >= limit) break;
+        continue;
+      } catch (_e) { /* 按普通文本 */ }
+    }
     let line = raw.trim();
     if (!line || line.startsWith('```')) continue;
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) continue;
@@ -452,6 +493,20 @@ export function parseBlocks(md) {
       }
       i = j;
       continue;
+    }
+
+    const splitMatch = SPLIT_LINE.exec(line);
+    if (splitMatch) {
+      try {
+        const data = JSON.parse(decodeURIComponent(splitMatch[1]));
+        out.push({
+          start, end: i + 1, type: 'split',
+          left: data.left && typeof data.left === 'object' ? data.left : { type: 'p', inline: '' },
+          right: data.right && typeof data.right === 'object' ? data.right : { type: 'p', inline: '' },
+        });
+        i += 1;
+        continue;
+      } catch (_e) { /* 坏标记按普通段落处理 */ }
     }
 
     if (line.trim().startsWith('$$')) {
@@ -558,6 +613,7 @@ export function blockToLines(block) {
       return [open, block.src || '', open.replace(/[^`]+$/, '')];
     }
     case 'math': return ['$$', block.src || '', '$$'];
+    case 'split': return [splitMarker(block)];
     case 'table': return String(block.src || '').split('\n');
     case 'h1': case 'h2': case 'h3': {
       const marks = { h1: '#', h2: '##', h3: '###' }[block.type];
@@ -575,6 +631,11 @@ export function blockToLines(block) {
 export function blockToHtml(block, exists = () => true) {
   switch (block.type) {
     case 'empty': return '';
+    case 'split': {
+      const left = block.left && block.left.inline ? String(block.left.inline) : '';
+      const right = block.right && block.right.inline ? String(block.right.inline) : '';
+      return '<div class="split-card-preview"><div>' + inline(left, exists) + '</div><i></i><div>' + inline(right, exists) + '</div></div>';
+    }
     case 'hr': return '<hr>';
     case 'code': return '<pre><code>' + escapeHtml(block.src || '') + '</code></pre>';
     case 'math': {

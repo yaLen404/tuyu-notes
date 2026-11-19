@@ -4,6 +4,21 @@ import assert from 'node:assert';
 
 import { render, inline, plainLines, escapeHtml, blockToLines, parseBlocks } from '../src/js/markdown.js';
 
+test('中线块：左右内容和格式能往返保存', () => {
+  const block = {
+    type: 'split',
+    left: { type: 'p', inline: '左边' },
+    right: { type: 'h2', inline: '**右边**' },
+  };
+  const md = blockToLines(block).join('\n');
+  const back = parseBlocks(md);
+  assert.equal(back.length, 1);
+  assert.equal(back[0].type, 'split');
+  assert.equal(back[0].left.inline, '左边');
+  assert.equal(back[0].right.type, 'h2');
+  assert.equal(back[0].right.inline, '**右边**');
+});
+
 test('普通段落里手写的 1. 不会被存成有序列表', () => {
   const lines = blockToLines({ type: 'p', inline: '1. 这不是列表' });
   assert.equal(lines[0], '1\\. 这不是列表');

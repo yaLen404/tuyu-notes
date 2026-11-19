@@ -283,6 +283,14 @@ export class NotePane {
     if (block.type === 'empty' && this._blocks.length === 1) cls.push('is-only');
     if (this._sel && this._sel.has(i)) cls.push('sel');
     const pad = block.depth ? ` style="margin-left:${block.depth * 20}px"` : '';
+    if (block.type === 'split') {
+      return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="split"${pad}>`
+        + '<div class="split-wrap">'
+        + this.splitSideHtml(block, 'left', i, exists)
+        + '<div class="split-divider" contenteditable="false"></div>'
+        + this.splitSideHtml(block, 'right', i, exists)
+        + '</div></div>';
+    }
     if (block.type === 'table') {
       return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="table"${pad}>`
         + '<div class="table-wrap">' + this.tableHtml(block, exists) + '</div></div>';
@@ -308,6 +316,152 @@ export class NotePane {
     return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="inline"${pad}>`
       + marker
       + `<div class="blk-txt"${ce}>${blockToHtml(block, exists)}</div></div>`;
+  }
+
+  splitSideData(side) {
+    const s = side && typeof side === 'object' ? side : {};
+    const types = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote'];
+    return {
+      type: types.includes(s.type) ? s.type : 'p',
+      inline: String(s.inline || ''),
+      depth: s.depth || 0,
+      done: Boolean(s.done),
+      num: s.num || 1,
+    };
+  }
+
+  splitSideHtml(block, side, index, exists) {
+    const s = this.splitSideData(block[side]);
+    let marker = '';
+    if (s.type === 'bullet') {
+      marker = '<span class="blk-dot" contenteditable="false">•</span>';
+    } else if (s.type === 'num') {
+      marker = `<span class="blk-mark-num" contenteditable="false">${s.num || 1}.</span>`;
+    } else if (s.type === 'task') {
+      marker = `<button class="blk-check split-check${s.done ? ' done' : ''}" type="button"`
+        + ` data-i="${index}" data-side="${side}" contenteditable="false">${s.done ? '✓' : ''}</button>`;
+    }
+    return `<div class="split-side split-${side} split-type-${s.type}" data-i="${index}" data-side="${side}">`
+      + marker
+      + `<div class="blk-txt split-txt" data-side="${side}">${inline(s.inline, exists)}</div>`
+      + '</div>';
+  }
+
+  syncSplitSide(sideEl) {
+    const blockEl = sideEl && sideEl.closest('.blk-split');
+    if (!blockEl) return;
+    const index = Number(blockEl.dataset.i);
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split') return;
+    const side = sideEl.dataset.side === 'right' ? 'right' : 'left';
+    const txt = sideEl.querySelector('.split-txt');
+    if (!txt) return;
+    block[side] = { ...this.splitSideData(block[side]), inline: htmlToInline(txt.innerHTML) };
+    this.writeBack();
+  }
+
+  focusSplitSide(index, side = 'left', where = 'start') {
+    const blockEl = this.blkEl(index);
+    const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
+    const txt = sideEl && sideEl.querySelector('.split-txt');
+    if (!txt) return false;
+    const range = document.createRange();
+    range.selectNodeContents(txt);
+    range.collapse(where === 'start');
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    if (document.activeElement !== this.dom.preview) this.dom.preview.focus();
+    this.markCurrent(blockEl);
+    this._focus = index;
+    this._lastEdit = index;
+    return true;
+  }
+
+  convertSplitSide(index, side, type) {
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split') return;
+    const allowed = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote'];
+    if (!allowed.includes(type)) return;
+    const s = this.splitSideData(block[side]);
+    s.type = type;
+    s.inline = s.inline || '';
+    if (type === 'num') s.num = 1;
+    if (type === 'task') s.done = false;
+    block[side] = s;
+    this.writeBack();
+    this.renderBlocks();
+    this.focusSplitSide(index, side, 'end');
+  }
+
+  openSplitSideMenu(index, side, x, y) {
+    this.closeBlockMenu();
+    const menu = document.createElement('div');
+    menu.className = 'blk-menu';
+    menu.innerHTML = '<button data-act="split-type" class="has-sub">块的格式<span class="sub-arrow">▸</span></button>'
+      + '<button data-act="split-del">删除中线块</button>';
+    this.placeMenu(menu, x, y);
+    this._menuEl = menu;
+    menu.addEventListener('mousedown', (ev) => ev.preventDefault());
+    menu.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button');
+      if (!btn) return;
+      if (btn.dataset.act === 'split-type') { this.openSplitTypeSubMenu(index, side, btn); return; }
+      this.closeBlockMenu();
+      if (btn.dataset.act === 'split-del') this.removeBlock(index);
+    });
+    const typeBtn = menu.querySelector('[data-act="split-type"]');
+    typeBtn.addEventListener('mouseenter', () => this.openSplitTypeSubMenu(index, side, typeBtn));
+    setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
+  }
+
+  openSplitTypeSubMenu(index, side, anchor) {
+    if (this._subEl) { this._subEl.remove(); this._subEl = null; }
+    const items = [['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'],
+      ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'], ['quote', '引用']];
+    const sub = document.createElement('div');
+    sub.className = 'blk-menu slash sub';
+    sub.innerHTML = items.map(([t, label]) => `<button data-type="${t}">${label}</button>`).join('');
+    this.placeSubMenu(sub, anchor);
+    this._subEl = sub;
+    sub.addEventListener('mousedown', (ev) => ev.preventDefault());
+    sub.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button');
+      if (!btn) return;
+      this.closeBlockMenu();
+      this.convertSplitSide(index, side, btn.dataset.type);
+    });
+  }
+
+  onSplitKey(e, index, side) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      this.focusSplitSide(index, side === 'left' ? 'right' : 'left', e.shiftKey ? 'end' : 'start');
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) { this.appendAfter(index); return; }
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const br = document.createElement('br');
+      range.insertNode(br);
+      range.setStartAfter(br);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const blockEl = this.blkEl(index);
+      const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
+      if (sideEl) this.syncSplitSide(sideEl);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (this._blocks[index + 1]) this.focusBlock(index + 1, 'start');
+      else this.appendAfter(index);
+    }
   }
 
   /** 表格源码 ↔ 行 / 对齐 */
@@ -708,6 +862,10 @@ export class NotePane {
     if (!blk || !el) return false;
     if (blk.type === 'code') return this.focusCode(index, where);
     if (blk.type === 'table') return this.focusTable(index, where);
+    if (blk.type === 'split') {
+      const box = el.getBoundingClientRect();
+      return this.focusSplitSide(index, x < box.left + box.width / 2 ? 'left' : 'right', where);
+    }
     if (SOURCE_BLOCKS.includes(blk.type)) return this.focusBlock(index, where);
     const txt = el.querySelector('.blk-txt');
     if (!txt) return this.focusBlock(index, where);
@@ -737,6 +895,11 @@ export class NotePane {
     const el = this.blkEl(index);
     if (!el) return false;
     if (el.dataset.kind === 'source') { this.openSource(index); return true; }
+    if (el.dataset.kind === 'split') {
+      const mid = el.getBoundingClientRect();
+      this.focusSplitSide(index, x < mid.left + mid.width / 2 ? 'left' : 'right', 'end');
+      return true;
+    }
     if (el.dataset.kind === 'table') { this.focusTable(index, 'start'); return true; }
     if (el.dataset.kind === 'code') { this.focusCode(index, 'end'); return true; }
     const r = el.getBoundingClientRect();
@@ -1166,6 +1329,8 @@ export class NotePane {
       }, 0);
       return;
     }
+    const side = target.closest('.split-side');
+    if (side) { this.syncSplitSide(side); return; }
     const txt = target.closest('.blk-txt');
     if (!txt) return;
     const blk = txt.closest('.blk');
@@ -1197,6 +1362,12 @@ export class NotePane {
     if (target && target.classList) {
       if (target.classList.contains('code-input')) { this.onCodeInput(target); return; }
       if (target.classList.contains('code-lang')) { this.filterLangMenu(target.value); return; }
+    }
+    const sideEl = (target && target.closest && target.closest('.split-side'))
+      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
+    if (sideEl) {
+      this.syncSplitSide(sideEl);
+      return;
     }
     const tableEl = (target && target.closest && target.closest('.blk-table'))
       || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.blk-table'));
@@ -1452,6 +1623,10 @@ export class NotePane {
       this.focusTable(index, where);
       return;
     }
+    if (blk.type === 'split') {
+      this.focusSplitSide(index, 'left', where);
+      return;
+    }
     if (SOURCE_BLOCKS.includes(blk.type)) {
       this.openSource(index);
       return;
@@ -1560,9 +1735,27 @@ export class NotePane {
     const blk = this._blocks[index];
     if (!blk || !this.note) return;
     const wasCode = blk.type === 'code';
+    const wasSplit = blk.type === 'split';
     const text = blk.type === 'code' || blk.type === 'math' || blk.type === 'table'
       ? String(blk.src || '')
-      : String(blk.inline || '');
+      : (wasSplit
+        ? [this.splitSideData(blk.left).inline, this.splitSideData(blk.right).inline].filter(Boolean).join('\n')
+        : String(blk.inline || ''));
+
+    if (type === 'split') {
+      blk.type = 'split';
+      blk.left = { type: 'p', inline: text };
+      blk.right = { type: 'p', inline: '' };
+      delete blk.inline; delete blk.src; delete blk.lang; delete blk.done; delete blk.num; delete blk.depth;
+      this.writeBack();
+      this.renderBlocks();
+      this.focusSplitSide(index, 'left', 'end');
+      return;
+    }
+    if (wasSplit) {
+      blk.inline = text;
+      delete blk.left; delete blk.right;
+    }
 
     if (type === 'code') {
       let lang = '';
@@ -1733,6 +1926,25 @@ export class NotePane {
       }
       // 点在高亮层 / 行号 / 代码框空白上 → 光标放到代码末尾
       if (!e.target.closest('.code-input, .code-lang')) this.focusCode(index, 'end');
+      return;
+    }
+    if (blk.dataset.kind === 'split') {
+      const check = e.target.closest('.split-check');
+      if (check) {
+        const side = check.dataset.side;
+        const block = this._blocks[index];
+        if (block && block.type === 'split') {
+          const s = this.splitSideData(block[side]);
+          s.done = !s.done;
+          block[side] = s;
+          this.writeBack({ forceHistory: true });
+          this.renderBlocks();
+        }
+        return;
+      }
+      this._focus = index;
+      this._lastEdit = index;
+      this.markCurrent(blk);
       return;
     }
     if (blk.dataset.kind === 'source') { this.openSource(index); return; }
@@ -1941,6 +2153,12 @@ export class NotePane {
   onPreviewContextMenu(e) {
     if (e.target.closest && e.target.closest('.code-lang')) return;   // 语言框交回系统
     if (e.target.closest && e.target.closest('.note-head, .empty-hint')) return;
+    const splitSide = e.target.closest && e.target.closest('.split-side');
+    if (splitSide) {
+      e.preventDefault();
+      this.openSplitSideMenu(Number(splitSide.closest('.blk-split').dataset.i), splitSide.dataset.side, e.clientX, e.clientY);
+      return;
+    }
     let blk = e.target.closest && e.target.closest('.blk');
     // 点在块间空隙 / 最后一块下方空白 / 右栏空白：取最近的块，
     // 别因为没命中 .blk 就什么都不弹。
@@ -2298,7 +2516,7 @@ export class NotePane {
     const items = [
       ['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'],
       ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'],
-      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['hr', '分割线'],
+      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['split', '中线块'], ['hr', '分割线'],
     ];
     const sub = document.createElement('div');
     sub.className = 'blk-menu slash sub';
@@ -2326,7 +2544,9 @@ export class NotePane {
     if (!idxs.length) return;
     const textOf = (b) => (['code', 'math', 'table'].includes(b.type)
       ? String(b.src || '')
-      : String(b.inline || ''));
+      : (b.type === 'split'
+        ? [this.splitSideData(b.left).inline, this.splitSideData(b.right).inline].filter(Boolean).join('\n')
+        : String(b.inline || '')));
     const tableDefault = '| 列 1 | 列 2 |\n| --- | --- |\n|  |  |';
 
     // 多块转代码：所有选中内容合并进同一个代码块，而不是生成多个 code 块
@@ -2359,6 +2579,14 @@ export class NotePane {
       const text = textOf(b);
       const wasCode = b.type === 'code';
       const wasTable = b.type === 'table';
+      const wasSplit = b.type === 'split';
+      if (type === 'split') {
+        b.type = 'split';
+        b.left = { type: 'p', inline: text };
+        b.right = { type: 'p', inline: '' };
+        delete b.inline; delete b.src; delete b.lang; delete b.done; delete b.num; delete b.depth;
+        continue;
+      }
       if (type === 'code') {
         b.type = 'code';
         b.src = text;
@@ -2385,6 +2613,7 @@ export class NotePane {
       }
       b.type = type;
       b.inline = text;
+      if (wasSplit) { delete b.left; delete b.right; }
       delete b.src; delete b.lang;
       if (type === 'num') b.num = 1; else delete b.num;
       if (type === 'task') b.done = false; else delete b.done;
@@ -2574,6 +2803,12 @@ export class NotePane {
         ta.selectionStart = ta.selectionEnd = start + 2;
         this.onSourceInput({ target: ta });
       }
+      return;
+    }
+    const splitEl = (e.target.closest && e.target.closest('.split-side'))
+      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
+    if (splitEl) {
+      this.onSplitKey(e, Number(splitEl.closest('.blk-split').dataset.i), splitEl.dataset.side);
       return;
     }
     const tableEl = (e.target.closest && e.target.closest('.blk-table'))
@@ -3417,7 +3652,7 @@ export class NotePane {
     const items = [
       ['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'],
       ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'],
-      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['hr', '分割线'],
+      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['split', '中线块'], ['hr', '分割线'],
     ];
     const menu = document.createElement('div');
     menu.className = 'blk-menu slash';
@@ -3653,6 +3888,11 @@ export class NotePane {
 function blockTextOf(block) {
   if (!block) return '';
   if (block.type === 'empty') return '';
+  if (block.type === 'split') {
+    const left = block.left && block.left.inline ? String(block.left.inline) : '';
+    const right = block.right && block.right.inline ? String(block.right.inline) : '';
+    return [left, right].filter(Boolean).join('\n');
+  }
   if (block.type === 'code' || block.type === 'math' || block.type === 'table') return block.src || '';
   return block.inline || '';
 }

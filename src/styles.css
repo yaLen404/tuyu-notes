@@ -411,6 +411,32 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .blk-table .note-table td:focus-within,
 .blk-table .note-table th:focus-within { background: rgba(139, 92, 246, .08); }
 .blk-table .latin { letter-spacing: 0; }
+
+/* 中线块：左右两个独立的小块，中间一条竖线 */
+.blk-split { margin: 4px 0 10px; }
+.split-wrap {
+  display: flex; align-items: stretch; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+}
+.split-side { flex: 1 1 0; min-width: 0; display: flex; align-items: flex-start; gap: 0; padding: 8px 12px; }
+.split-side + .split-divider + .split-side { padding-left: 14px; }
+.split-divider { flex: 0 0 1px; width: 1px; background: var(--line); }
+.split-txt { flex: 1 1 auto; min-width: 0; outline: none; white-space: pre-wrap; }
+.split-type-h1 .split-txt { font-size: 1.35em; font-weight: 600; line-height: 1.3; }
+.split-type-h2 .split-txt { font-size: 1.15em; font-weight: 600; line-height: 1.35; }
+.split-type-h3 .split-txt { font-size: 1.02em; font-weight: 600; line-height: 1.4; }
+.split-type-quote .split-txt { color: var(--muted); border-left: 2px solid var(--line); padding-left: 9px; }
+.split-type-task .split-check { margin-right: 7px; }
+.split-side:focus-within { background: rgba(139, 92, 246, .06); }
+.blk-split.cur .split-wrap { border-color: #3b3b3b; }
+.split-card-preview { display: flex; gap: 6px; }
+.split-card-preview i { width: 1px; background: var(--line); }
+.split-card-preview > div { flex: 1; min-width: 0; }
+@media (max-width: 640px) {
+  .split-wrap { flex-direction: column; }
+  .split-divider { width: auto; height: 1px; }
+  .split-side + .split-divider + .split-side { padding-left: 12px; }
+}
 .preview .wl { color: #9db8ff; text-decoration: none; cursor: pointer; }
 .preview .wl:hover { text-decoration: underline; }
 .preview .wl.missing { color: #e9973f; }
@@ -870,3 +896,27 @@ html, body, #app, #canvas, #preview, .canvas, .preview, .pane {
 
 /* 拉新线时只藏"原来那一条"，其他连线照常 */
 .edges path.edge.is-hidden { display: none; }
+
+/* 空白处左键拖出的选框 */
+.marquee {
+  position: absolute; display: none; pointer-events: none; z-index: 6;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 3px;
+}
+
+/* 笔记里的"跳转按钮"块 */
+.jump-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 4px 0; padding: 5px 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--hover); color: var(--text);
+  font-size: .95em; cursor: pointer; user-select: none;
+}
+.jump-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 画布上的"跳转按钮"节点 */
+.card.jump { border-radius: 999px; }
+.card.jump .card-inner { display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--head); }
+.card.jump .jump-pill { color: var(--text); font-size: 13px; font-weight: 600; padding: 0 12px; white-space: nowrap; }
+.card.jump:hover .jump-pill { color: var(--accent); }

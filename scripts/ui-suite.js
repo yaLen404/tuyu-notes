@@ -3029,6 +3029,60 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '网格编辑 / Tab 跳格 / 末尾加行';
   });
 
+  await run('中线块左右独立编辑并能换格式', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左边\n\n右边';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      const split = document.querySelector('#preview .blk-split');
+      if (!split) fail('没有生成中线块');
+      const sides = [...split.querySelectorAll('.split-side')];
+      if (sides.length !== 2) fail('中线块不是左右两边');
+      const left = sides[0].querySelector('.split-txt');
+      const right = sides[1].querySelector('.split-txt');
+      if (!left || !right) fail('左右缺少可编辑文本');
+      left.textContent = '左独立';
+      left.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '左独立' }));
+      right.textContent = '右独立';
+      right.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右独立' }));
+      await wait(200);
+      const rr = right.getBoundingClientRect();
+      right.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
+      }));
+      await wait(160);
+      const typeBtn = document.querySelector('.blk-menu [data-act="split-type"]');
+      if (!typeBtn) fail('中线块右键没有块的格式');
+      typeBtn.click();
+      await wait(120);
+      const h3 = document.querySelector('.blk-menu.sub [data-type="h3"]');
+      if (!h3) fail('中线块格式子菜单没有标题 3');
+      h3.click();
+      await wait(220);
+      const split2 = document.querySelector('#preview .blk-split');
+      if (!split2.querySelector('.split-type-h3')) fail('右侧没有切换成标题 3');
+      if (split2.querySelector('.split-left .split-txt').textContent !== '左独立') fail('左边内容被右边影响');
+      if (split2.querySelector('.split-right .split-txt').textContent !== '右独立') fail('右边内容丢了');
+      f.pane.renderBlocks();
+      await wait(180);
+      const split3 = document.querySelector('#preview .blk-split');
+      if (!split3 || !split3.querySelector('.split-type-h3')) fail('重排后中线块/格式丢了');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '左右独立 / 右侧转 h2 / 重排保留';
+  });
+
   await run('Ctrl+1/2/3 把当前块变成对应标题', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
