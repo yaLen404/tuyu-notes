@@ -320,10 +320,12 @@ export class NotePane {
 
   splitSideData(side) {
     const s = side && typeof side === 'object' ? side : {};
-    const types = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote'];
+    const types = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote', 'code', 'math', 'table', 'hr'];
     return {
       type: types.includes(s.type) ? s.type : 'p',
       inline: String(s.inline || ''),
+      src: String(s.src || ''),
+      lang: String(s.lang || ''),
       depth: s.depth || 0,
       done: Boolean(s.done),
       num: s.num || 1,
@@ -341,10 +343,13 @@ export class NotePane {
       marker = `<button class="blk-check split-check${s.done ? ' done' : ''}" type="button"`
         + ` data-i="${index}" data-side="${side}" contenteditable="false">${s.done ? '✓' : ''}</button>`;
     }
+    const body = ['code', 'math', 'table'].includes(s.type)
+      ? `<textarea class="split-source" data-side="${side}" spellcheck="false" wrap="off">${escapeHtml(s.src)}</textarea>`
+      : (s.type === 'hr'
+        ? '<hr class="split-hr">'
+        : `<div class="blk-txt split-txt" data-side="${side}">${inline(s.inline, exists)}</div>`);
     return `<div class="split-side split-${side} split-type-${s.type}" data-i="${index}" data-side="${side}">`
-      + marker
-      + `<div class="blk-txt split-txt" data-side="${side}">${inline(s.inline, exists)}</div>`
-      + '</div>';
+      + marker + body + '</div>';
   }
 
   syncSplitSide(sideEl) {
@@ -355,15 +360,29 @@ export class NotePane {
     if (!block || block.type !== 'split') return;
     const side = sideEl.dataset.side === 'right' ? 'right' : 'left';
     const txt = sideEl.querySelector('.split-txt');
-    if (!txt) return;
-    block[side] = { ...this.splitSideData(block[side]), inline: htmlToInline(txt.innerHTML) };
+    const src = sideEl.querySelector('.split-source');
+    const old = this.splitSideData(block[side]);
+    if (txt) block[side] = { ...old, inline: htmlToInline(txt.innerHTML) };
+    else if (src) block[side] = { ...old, src: src.value.replace(/\r\n?/g, '\n') };
+    else return;
     this.writeBack();
   }
 
   focusSplitSide(index, side = 'left', where = 'start') {
     const blockEl = this.blkEl(index);
     const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
-    const txt = sideEl && sideEl.querySelector('.split-txt');
+    if (!sideEl) return false;
+    const src = sideEl.querySelector('.split-source');
+    if (src) {
+      src.focus();
+      const pos = where === 'start' ? 0 : src.value.length;
+      try { src.setSelectionRange(pos, pos); } catch (_e) { /* ignore */ }
+      this.markCurrent(blockEl);
+      this._focus = index;
+      this._lastEdit = index;
+      return true;
+    }
+    const txt = sideEl.querySelector('.split-txt');
     if (!txt) return false;
     const range = document.createRange();
     range.selectNodeContents(txt);
@@ -381,13 +400,20 @@ export class NotePane {
   convertSplitSide(index, side, type) {
     const block = this._blocks[index];
     if (!block || block.type !== 'split') return;
-    const allowed = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote'];
+    const allowed = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote', 'code', 'math', 'table', 'hr'];
     if (!allowed.includes(type)) return;
     const s = this.splitSideData(block[side]);
+    const text = s.inline || s.src || '';
     s.type = type;
-    s.inline = s.inline || '';
-    if (type === 'num') s.num = 1;
-    if (type === 'task') s.done = false;
+    delete s.inline; delete s.src; delete s.lang; delete s.num; delete s.depth; delete s.done;
+    if (['code', 'math', 'table'].includes(type)) {
+      s.src = text;
+      if (type === 'code') s.lang = '';
+    } else if (type !== 'hr') {
+      s.inline = text;
+      if (type === 'num') s.num = 1;
+      if (type === 'task') s.done = false;
+    }
     block[side] = s;
     this.writeBack();
     this.renderBlocks();
@@ -418,7 +444,8 @@ export class NotePane {
   openSplitTypeSubMenu(index, side, anchor) {
     if (this._subEl) { this._subEl.remove(); this._subEl = null; }
     const items = [['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'],
-      ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'], ['quote', '引用']];
+      ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'], ['quote', '引用'],
+      ['code', '代码块'], ['math', '公式'], ['table', '表格'], ['hr', '分割线']];
     const sub = document.createElement('div');
     sub.className = 'blk-menu slash sub';
     sub.innerHTML = items.map(([t, label]) => `<button data-type="${t}">${label}</button>`).join('');
@@ -434,6 +461,30 @@ export class NotePane {
   }
 
   onSplitKey(e, index, side) {
+    const source = e.target && e.target.classList && e.target.classList.contains('split-source');
+    if (source) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const ta = e.target;
+        const start = ta.selectionStart;
+        ta.value = ta.value.slice(0, start) + '  ' + ta.value.slice(ta.selectionEnd);
+        ta.selectionStart = ta.selectionEnd = start + 2;
+        const blockEl = this.blkEl(index);
+        const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
+        if (sideEl) this.syncSplitSide(sideEl);
+        return;
+      }
+      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (this._blocks[index + 1]) this.focusBlock(index + 1, 'start');
+        else this.appendAfter(index);
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        this.appendAfter(index);
+      }
+      return;
+    }
     if (e.key === 'Tab') {
       e.preventDefault();
       this.focusSplitSide(index, side === 'left' ? 'right' : 'left', e.shiftKey ? 'end' : 'start');
@@ -1739,7 +1790,8 @@ export class NotePane {
     const text = blk.type === 'code' || blk.type === 'math' || blk.type === 'table'
       ? String(blk.src || '')
       : (wasSplit
-        ? [this.splitSideData(blk.left).inline, this.splitSideData(blk.right).inline].filter(Boolean).join('\n')
+        ? [this.splitSideData(blk.left).inline || this.splitSideData(blk.left).src,
+          this.splitSideData(blk.right).inline || this.splitSideData(blk.right).src].filter(Boolean).join('\n')
         : String(blk.inline || ''));
 
     if (type === 'split') {
@@ -2545,7 +2597,8 @@ export class NotePane {
     const textOf = (b) => (['code', 'math', 'table'].includes(b.type)
       ? String(b.src || '')
       : (b.type === 'split'
-        ? [this.splitSideData(b.left).inline, this.splitSideData(b.right).inline].filter(Boolean).join('\n')
+        ? [this.splitSideData(b.left).inline || this.splitSideData(b.left).src,
+          this.splitSideData(b.right).inline || this.splitSideData(b.right).src].filter(Boolean).join('\n')
         : String(b.inline || '')));
     const tableDefault = '| 列 1 | 列 2 |\n| --- | --- |\n|  |  |';
 
@@ -3889,8 +3942,8 @@ function blockTextOf(block) {
   if (!block) return '';
   if (block.type === 'empty') return '';
   if (block.type === 'split') {
-    const left = block.left && block.left.inline ? String(block.left.inline) : '';
-    const right = block.right && block.right.inline ? String(block.right.inline) : '';
+    const left = block.left && (block.left.inline || block.left.src) ? String(block.left.inline || block.left.src) : '';
+    const right = block.right && (block.right.inline || block.right.src) ? String(block.right.inline || block.right.src) : '';
     return [left, right].filter(Boolean).join('\n');
   }
   if (block.type === 'code' || block.type === 'math' || block.type === 'table') return block.src || '';

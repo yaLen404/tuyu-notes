@@ -3062,6 +3062,11 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       if (!typeBtn) fail('中线块右键没有块的格式');
       typeBtn.click();
       await wait(120);
+      const typeNames = [...document.querySelectorAll('.blk-menu.sub [data-type]')]
+        .map((b) => b.dataset.type);
+      for (const t of ['code', 'math', 'table', 'hr']) {
+        if (!typeNames.includes(t)) fail('中线块格式缺少：' + t);
+      }
       const h3 = document.querySelector('.blk-menu.sub [data-type="h3"]');
       if (!h3) fail('中线块格式子菜单没有标题 3');
       h3.click();
@@ -3074,6 +3079,20 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(180);
       const split3 = document.querySelector('#preview .blk-split');
       if (!split3 || !split3.querySelector('.split-type-h3')) fail('重排后中线块/格式丢了');
+
+      // 代码格式的侧栏用 source 输入框，内容也要能保存
+      f.pane.convertSplitSide(0, 'right', 'code');
+      await wait(200);
+      const codeSide = document.querySelector('#preview .split-right .split-source');
+      if (!codeSide) fail('中线块右侧代码格式没有源码输入框');
+      codeSide.value = 'const side = 1;';
+      codeSide.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(160);
+      f.pane.renderBlocks();
+      await wait(160);
+      if (document.querySelector('#preview .split-right .split-source').value !== 'const side = 1;') {
+        fail('中线块代码内容没有保存');
+      }
     } finally {
       f.pane.show(null);
       note.content = original;

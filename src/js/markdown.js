@@ -174,16 +174,21 @@ const TASK = /^(\s*)[-*+]\s+\[([ xX])\]\s+(.*)$/;
 const QUOTE = /^\s*>\s?(.*)$/;
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
 const SPLIT_LINE = /^\s*<!--fyn-split:([^>]+)-->\s*$/;
-const SPLIT_TYPES = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote'];
+const SPLIT_TYPES = ['p', 'h1', 'h2', 'h3', 'bullet', 'num', 'task', 'quote', 'code', 'math', 'table', 'hr'];
 function splitMarker(block) {
   const clean = (s) => {
     const side = s && typeof s === 'object' ? s : {};
-    return {
-      type: SPLIT_TYPES.includes(side.type) ? side.type : 'p',
-      inline: String(side.inline || ''),
-      ...(side.depth ? { depth: side.depth } : {}),
-      ...(side.type === 'task' ? { done: Boolean(side.done) } : {}),
-    };
+    const type = SPLIT_TYPES.includes(side.type) ? side.type : 'p';
+    const out = { type };
+    if (['code', 'math', 'table'].includes(type)) {
+      out.src = String(side.src || '');
+      if (type === 'code') out.lang = String(side.lang || '');
+    } else if (type !== 'hr') {
+      out.inline = String(side.inline || '');
+    }
+    if (side.depth) out.depth = side.depth;
+    if (type === 'task') out.done = Boolean(side.done);
+    return out;
   };
   const payload = { left: clean(block.left), right: clean(block.right) };
   return '<!--fyn-split:' + encodeURIComponent(JSON.stringify(payload)) + '-->';
@@ -230,7 +235,7 @@ export function renderBlocks(md, exists = () => true) {
     if (splitMatch) {
       try {
         const data = JSON.parse(decodeURIComponent(splitMatch[1]));
-        const side = (s) => (s && s.inline ? inline(String(s.inline), exists) : '');
+        const side = (s) => (s && (s.inline || s.src) ? inline(String(s.inline || s.src), exists) : '');
         out.push({
           start, end: i + 1,
           html: '<div class="split-card-preview"><div>' + side(data.left)
@@ -383,7 +388,8 @@ export function plainLines(md, limit = 12) {
     if (splitMatch) {
       try {
         const data = JSON.parse(decodeURIComponent(splitMatch[1]));
-        const text = [data.left && data.left.inline, data.right && data.right.inline]
+        const text = [data.left && (data.left.inline || data.left.src),
+          data.right && (data.right.inline || data.right.src)]
           .filter(Boolean).join(' ');
         if (text) out.push(String(text).replace(/\s{2,}/g, ' ').trim());
         if (out.length >= limit) break;
@@ -632,8 +638,8 @@ export function blockToHtml(block, exists = () => true) {
   switch (block.type) {
     case 'empty': return '';
     case 'split': {
-      const left = block.left && block.left.inline ? String(block.left.inline) : '';
-      const right = block.right && block.right.inline ? String(block.right.inline) : '';
+      const left = block.left && (block.left.inline || block.left.src) ? String(block.left.inline || block.left.src) : '';
+      const right = block.right && (block.right.inline || block.right.src) ? String(block.right.inline || block.right.src) : '';
       return '<div class="split-card-preview"><div>' + inline(left, exists) + '</div><i></i><div>' + inline(right, exists) + '</div></div>';
     }
     case 'hr': return '<hr>';
