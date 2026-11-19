@@ -532,17 +532,23 @@ export function parseBlocks(md) {
       para.push(lines[i].trim());
       i += 1;
     }
-    out.push({ start, end: i, type: 'p', inline: para.join('\n') });
+    out.push({ start, end: i, type: 'p', inline: para.map(unescapeOrderedStart).join('\n') });
   }
   return out;
 }
+
+/** 普通段落里以 1. / 2) 开头的文字要转义，否则重新解析会变成有序列表 */
+const escapeOrderedStart = (line) =>
+  String(line).replace(/^(\s*)(\d{1,2})([.)])(\s+)/, '$1$2\\$3$4');
+const unescapeOrderedStart = (line) =>
+  String(line).replace(/^(\s*)(\d{1,2})\\([.)])(\s+)/, '$1$2$3$4');
 
 /** 一个块存回 markdown 时的源码行 */
 export function blockToLines(block) {
   const pad = '  '.repeat(block.depth || 0);
   switch (block.type) {
     // 空块加了字就变成普通段落（空块本身不占源码行）
-    case 'empty': return block.inline ? String(block.inline).split('\n') : [];
+    case 'empty': return block.inline ? String(block.inline).split('\n').map(escapeOrderedStart) : [];
     case 'hr': return ['---'];
     case 'code': {
       // 代码里本身出现 ``` 行时，围栏要更长，否则存回去会把代码截断
@@ -559,7 +565,7 @@ export function blockToLines(block) {
     case 'num': return [pad + (block.num || 1) + '. ' + (block.inline || '')];
     case 'task': return [pad + '- [' + (block.done ? 'x' : ' ') + '] ' + (block.inline || '')];
     case 'quote': return String(block.inline || '').split('\n').map((l) => '> ' + l);
-    default: return String(block.inline || '').split('\n');
+    default: return String(block.inline || '').split('\n').map(escapeOrderedStart);
   }
 }
 

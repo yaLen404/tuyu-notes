@@ -2,7 +2,16 @@ import test from 'node:test';
 import { stripImageEmbeds } from '../src/js/markdown.js';
 import assert from 'node:assert';
 
-import { render, inline, plainLines, escapeHtml } from '../src/js/markdown.js';
+import { render, inline, plainLines, escapeHtml, blockToLines, parseBlocks } from '../src/js/markdown.js';
+
+test('普通段落里手写的 1. 不会被存成有序列表', () => {
+  const lines = blockToLines({ type: 'p', inline: '1. 这不是列表' });
+  assert.equal(lines[0], '1\\. 这不是列表');
+  const blocks = parseBlocks(lines.join('\n'));
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].type, 'p');
+  assert.equal(blocks[0].inline, '1. 这不是列表');
+});
 
 test('行内：双链区分存在与缺失', () => {
   const html = inline('看 [[甲]] 和 [[乙]]', (t) => t === '甲');

@@ -1221,14 +1221,13 @@ export class NotePane {
     const blk = this._blocks[index];
     if (!blk || blk.type !== 'p') return;
     const text = String(blk.inline || '');
-    const m = /^(#{1,3}|[-*+]|\d{1,2}[.)]|\[[ xX]?\]|>)(\s+)([\s\S]*)$/.exec(text);
+    const m = /^(#{1,3}|[-*+]|\[[ xX]?\]|>)(\s+)([\s\S]*)$/.exec(text);
     if (!m) return;
     const [, mark, , rest] = m;
     let type = 'p';
     if (mark[0] === '#') type = `h${mark.length}`;
     else if (mark === '>' ) type = 'quote';
     else if (/^\[[ xX]?\]$/.test(mark)) type = 'task';
-    else if (/^\d/.test(mark)) type = 'num';
     else type = 'bullet';
     blk.type = type;
     blk.inline = rest;

@@ -1869,6 +1869,23 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     if (!/^- 自动列表/m.test(content())) fail('输入 "- " 没有转成列表');
     if (!document.querySelector('#preview .blk-bullet')) fail('预览里没出现列表块');
 
+    // ②b 手写 "1. " 不再自动变成有序列表
+    f.pane.appendBlock();
+    await wait(220);
+    ed = activeEditor();
+    setBlockText(ed, '1. 这不是列表');
+    await wait(300);
+    const plainIdx = f.pane._blocks.length - 1;
+    if (f.pane._blocks[plainIdx].type !== 'p') {
+      fail('手写 1. 被自动转成了：' + f.pane._blocks[plainIdx].type);
+    }
+    if (!/1\\\. 这不是列表/.test(content())) fail('没有转义成普通段落：' + content());
+    f.pane.renderBlocks();
+    await wait(180);
+    if (!f.pane._blocks.some((b) => b.type === 'p' && b.inline === '1. 这不是列表')) {
+      fail('重新解析后又变成有序列表');
+    }
+
     // ③ Tab 缩进这一块
     const listIndex = f.pane._blocks.findIndex((b) => b.type === 'bullet');
     if (listIndex < 0) fail('找不到列表块');
