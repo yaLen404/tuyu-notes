@@ -2367,18 +2367,23 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '画板不指任何笔记时，右栏这篇记在 last_note 里';
   });
 
-  await run('拖空白平移时不取消选中', async () => {
+  await run('中键拖空白平移时不取消选中', async () => {
     const first = ws.notesOf()[0];
     f.selectNote(first.id, false);
     await wait(100);
-    pointer(canvasEl, 'pointerdown', 20, 20);
+    // 左键现在是画框多选，平移改用中键
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 20, pointerId: 1, button: 1,
+    }));
     pointer(window, 'pointermove', 120, 90);
     pointer(window, 'pointerup', 120, 90);
     await wait(120);
+    c.multi.clear();
+    c.paintSelection();
     if (c.selected !== first.id) fail('平移把选中弄丢了');
     f.canvas.fit();
     await wait(80);
-    return '平移保留选中';
+    return '中键平移保留选中';
   });
 
   await run('再点卡片能重新选中', async () => {
@@ -2847,6 +2852,34 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(140);
     }
     return '空代码块退格 / Delete → 整块删除';
+  });
+
+  await run('块首按 ↑ 落到上一块靠近横坐标的位置', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '上一块很长很长的文字内容\n\n下一块开头';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.focusBlock(1, 'start');
+      await wait(100);
+      const second = document.querySelector('#preview .blk[data-i="1"] .blk-txt');
+      keyOn(second, 'ArrowUp');
+      await wait(180);
+      if (f.pane._focus !== 0) fail('↑ 没有回到上一块：' + f.pane._focus);
+      const first = document.querySelector('#preview .blk[data-i="0"] .blk-txt');
+      const sel = window.getSelection();
+      const offset = f.pane._offIn(first, sel.anchorNode, sel.anchorOffset);
+      if (offset > 4) fail('↑ 落到了上一块末尾而不是靠近原位置：' + offset);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '↑ 按横坐标落到上一块';
   });
 
   await run('表格就地编辑、Tab 跳格和自动加行', async () => {

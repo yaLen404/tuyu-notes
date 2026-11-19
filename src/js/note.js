@@ -695,6 +695,37 @@ export class NotePane {
     return best;
   }
 
+  /** 跨块上下移动时按横坐标落到最近的位置，而不是一律到块首 / 块尾 */
+  focusBlockNearX(index, x, where = 'end') {
+    const blk = this._blocks[index];
+    const el = blk && this.blkEl(index);
+    if (!blk || !el) return false;
+    if (blk.type === 'code') return this.focusCode(index, where);
+    if (blk.type === 'table') return this.focusTable(index, where);
+    if (SOURCE_BLOCKS.includes(blk.type)) return this.focusBlock(index, where);
+    const txt = el.querySelector('.blk-txt');
+    if (!txt) return this.focusBlock(index, where);
+    const box = el.getBoundingClientRect();
+    const line = parseFloat(getComputedStyle(txt).lineHeight) || 22;
+    const y = where === 'end'
+      ? Math.max(box.top + 2, box.bottom - line / 2)
+      : Math.min(box.bottom - 2, box.top + line / 2);
+    const px = Math.min(Math.max(x, box.left + 2), box.right - 2);
+    const range = document.caretRangeFromPoint ? document.caretRangeFromPoint(px, y) : null;
+    if (range && txt.contains(range.startContainer)) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      if (document.activeElement !== this.dom.preview) this.dom.preview.focus();
+      this._focus = index;
+      this._lastEdit = index;
+      this.markCurrent(el);
+      this.ensureCaretVisible();
+      return true;
+    }
+    return this.caretAt(index, where);
+  }
+
   /** 点在块的左右留白：按点击的纵坐标把光标放到那一行，而不是跳到全文最后 */
   focusBlockAtPoint(index, x, y) {
     const el = this.blkEl(index);
@@ -2665,12 +2696,12 @@ export class NotePane {
         const atEnd = after.toString().length === 0;
         if (e.key === 'ArrowUp' && atStart && index > 0) {
           e.preventDefault();
-          this.focusBlock(index - 1, 'end');
+          this.focusBlockNearX(index - 1, r.getBoundingClientRect().left, 'end');
           return;
         }
         if (e.key === 'ArrowDown' && atEnd && index < this._blocks.length - 1) {
           e.preventDefault();
-          this.focusBlock(index + 1, 'start');
+          this.focusBlockNearX(index + 1, r.getBoundingClientRect().left, 'start');
           return;
         }
         if (e.key === 'ArrowDown' && atEnd && index === this._blocks.length - 1
@@ -2788,7 +2819,13 @@ export class NotePane {
     const neighbor = this._blocks[at];
     const atomic = neighbor && (neighbor.type === 'code' || SOURCE_BLOCKS.includes(neighbor.type));
     if (neighbor && !atomic) {
-      this.focusBlock(at, dir > 0 ? 'start' : 'end');
+      if (dir < 0) {
+        const ta = this.codeInput(index);
+        const x = ta ? ta.getBoundingClientRect().left : 0;
+        this.focusBlockNearX(at, x, 'end');
+      } else {
+        this.focusBlock(at, 'start');
+      }
       return;
     }
     const insertAt = dir > 0 ? index + 1 : index;
