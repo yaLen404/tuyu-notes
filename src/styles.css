@@ -453,9 +453,11 @@ body.split-resizing { cursor: col-resize; user-select: none; }
 .split-side.active,
 .split-side:focus-within { background: rgba(139, 92, 246, .06); }
 .blk-split.cur .split-wrap { border-color: #3b3b3b; }
-.split-card-preview { display: flex; gap: 6px; }
-.split-card-preview i { width: 1px; background: var(--line); }
-.split-card-preview > div { flex: 1; min-width: 0; }
+/* 画布卡片很窄：中线块在卡片里不要硬排两列，按一段连续文字显示 */
+.split-card-preview { display: block; }
+.split-card-preview i { display: none; }
+.split-card-preview > div { display: inline; }
+.split-card-preview > div + div::before { content: ' · '; }
 @media (max-width: 640px) {
   .split-wrap { flex-direction: column; }
   .split-side.split-left { flex: 1 1 auto; }
@@ -586,8 +588,8 @@ body.split-resizing { cursor: col-resize; user-select: none; }
 }
 /* 光标落点：正在写的那一块有淡淡底色，光标闪的时候也看得出位置 */
 /* 光标所在的那一块只给一点淡淡底色（单宿主：用 .cur 代替 :focus-within） */
-.blk.cur .blk-txt,
-.blk:focus-within .blk-txt {
+.blk.cur .blk-txt:not(.split-txt),
+.blk:focus-within .blk-txt:not(.split-txt) {
   background: rgba(255, 255, 255, .04);
 }
 /* 空块也要占一行：代码块后面的空段落如果只有 4px 高，根本点不中，
