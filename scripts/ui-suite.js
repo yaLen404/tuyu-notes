@@ -3051,6 +3051,14 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(120);
       if (document.querySelectorAll('#preview .split-side.active').length !== 1) fail('两侧同时显示编辑状态');
       if (!document.querySelector('#preview .split-left.active')) fail('左侧没有编辑状态');
+      const activeSideBg = getComputedStyle(document.querySelector('#preview .split-left')).backgroundColor;
+      const activeTxtBg = getComputedStyle(document.querySelector('#preview .split-left .split-txt')).backgroundColor;
+      if (activeSideBg !== 'rgba(0, 0, 0, 0)' && activeSideBg !== 'transparent') {
+        fail('编辑底色铺满了整侧：' + activeSideBg);
+      }
+      if (activeTxtBg === 'rgba(0, 0, 0, 0)' || activeTxtBg === 'transparent') {
+        fail('实际编辑区域没有底色：' + activeTxtBg);
+      }
       f.pane.focusSplitSide(0, 'right', 'start');
       await wait(120);
       if (document.querySelectorAll('#preview .split-side.active').length !== 1) fail('切换后两侧同时显示编辑状态');
