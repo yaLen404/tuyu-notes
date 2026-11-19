@@ -1077,13 +1077,17 @@ export class NotePane {
   currentBlockEl() {
     const active = document.activeElement;
     if (active && active.closest && this.dom.preview.contains(active)) {
+      if (active.closest('.blk-txt')) return active.closest('.blk-txt');
       const own = active.closest('.blk');
       if (own) return own.querySelector('.blk-txt') || own;
     }
     const sel = window.getSelection();
     if (!sel || !sel.anchorNode) return null;
     const node = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
-    const blk = node && node.closest ? node.closest('.blk') : null;
+    if (!node) return null;
+    const txt = node.closest && node.closest('.blk-txt');
+    if (txt) return txt;
+    const blk = node.closest ? node.closest('.blk') : null;
     if (!blk) return null;
     return blk.querySelector('.blk-txt') || blk;
   }
@@ -1595,7 +1599,8 @@ export class NotePane {
     this._focus = Number(blk.dataset.i);
     this._lastEdit = this._focus;
     this.markCurrent(blk);
-    const side = target.closest('.split-side');
+    const side = target.closest('.split-side')
+      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
     if (side) this.markSplitSide(side);
   }
 

@@ -3060,6 +3060,17 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       right.textContent = '右独立';
       right.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右独立' }));
       await wait(200);
+      // 真实输入事件的 target 是 #preview，必须仍然写回右侧
+      right.textContent = '右侧打字';
+      document.getElementById('preview').dispatchEvent(new InputEvent('input', {
+        bubbles: true, inputType: 'insertText', data: '右侧打字',
+      }));
+      await wait(180);
+      if (f.pane._blocks[0].left.inline !== '左独立') fail('编辑右侧时改到了左侧：' + f.pane._blocks[0].left.inline);
+      if (f.pane._blocks[0].right.inline !== '右侧打字') fail('右侧输入没有写回：' + f.pane._blocks[0].right.inline);
+      right.textContent = '右独立';
+      right.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右独立' }));
+      await wait(160);
       const rr = right.getBoundingClientRect();
       right.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true, cancelable: true,
