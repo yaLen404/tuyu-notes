@@ -263,11 +263,17 @@ export class NotePane {
     if (el.matches('.blk-h1, .blk-h2, .blk-h3')) el.classList.add('blk-top-heading');
   }
 
-  /** 连续的有序列表块自己编号，插一块删一块都会自动重排 */
+  /** 连续的有序列表块自己编号；中间的空块不打断编号，写回也保存真实序号 */
   renumber() {
     let run = 0;
     for (const b of this._blocks) {
-      if (b.type === 'num') { run += 1; b._num = run; } else { run = 0; }
+      if (b.type === 'num') {
+        run += 1;
+        b._num = run;
+        b.num = run;
+      } else if (b.type !== 'empty') {
+        run = 0;
+      }
     }
   }
 

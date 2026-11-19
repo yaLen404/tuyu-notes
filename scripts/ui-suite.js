@@ -2871,6 +2871,35 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('有序列表跨空行继续编号', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '1. 第一项\n\n\n\n1. 第二项';
+      f.pane.renderBlocks();
+      await wait(220);
+      const nums = f.pane._blocks.filter((b) => b.type === 'num');
+      if (nums.length !== 2) fail('有序列表块数量不对：' + nums.length);
+      if (nums[0]._num !== 1 || nums[1]._num !== 2) {
+        fail('空行后编号没有继续：' + nums.map((b) => b._num).join(','));
+      }
+      f.pane.writeBack();
+      if (!note.content.includes('2. 第二项')) fail('编号没有写回：' + note.content);
+      f.pane.renderBlocks();
+      await wait(160);
+      const again = f.pane._blocks.filter((b) => b.type === 'num');
+      if (again[1] && again[1]._num !== 2) fail('重新打开后编号又重置：' + again[1]._num);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '1. → 空行 → 2.';
+  });
+
   await run('块首按 ↑ 落到上一块靠近横坐标的位置', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
