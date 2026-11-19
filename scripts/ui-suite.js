@@ -3199,6 +3199,18 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(120);
       if (!document.querySelector('#preview .split-right.active')) fail('点右侧图片后焦点跑到了左边');
       if (document.querySelector('#preview .split-left.active')) fail('点右侧图片后左边仍处于编辑状态');
+      rightImg.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(ir.left + ir.width / 2), clientY: Math.round(ir.top + ir.height / 2),
+      }));
+      await wait(160);
+      for (const act of ['split-copy-image', 'split-copy-ref', 'split-cut-image']) {
+        if (!document.querySelector(`.blk-menu [data-act="${act}"]`)) fail('分割块图片菜单缺少：' + act);
+      }
+      const copyRef = document.querySelector('.blk-menu [data-act="split-copy-ref"]');
+      copyRef.click();
+      await wait(180);
+      if (!(await window.tuyu.clipboard.read()).includes('img-')) fail('分割块复制图片引用没写剪贴板');
       f.pane.renderBlocks();
       await wait(200);
       leftImg = document.querySelector('#preview .split-left img.note-img');
@@ -3245,6 +3257,63 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(160);
     }
     return '剪切引用粘贴到右侧并渲染';
+  });
+
+  await run('中线块里的图片可以剪切和退格删除', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左边';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      f.pane._blocks[0].right = { type: 'p', inline: '![[img-side-cut.png]]' };
+      f.pane.writeBack();
+      f.pane.renderBlocks();
+      await wait(220);
+      let img = document.querySelector('#preview .split-right img.note-img');
+      if (!img) fail('中线块图片没渲染');
+      let r = img.getBoundingClientRect();
+      img.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2),
+      }));
+      await wait(160);
+      const cut = document.querySelector('.blk-menu [data-act="split-cut-image"]');
+      if (!cut) fail('中线块图片菜单没有剪切图片');
+      cut.click();
+      await wait(260);
+      if (document.querySelector('#preview .split-right img.note-img')) fail('剪切图片后右侧图片还在');
+      if (f.pane._blocks[0].left.inline !== '左边') fail('剪切右侧图片影响到了左侧');
+
+      f.pane._blocks[0].right = { type: 'p', inline: '前 ![[img-side-back.png]] 后' };
+      f.pane.writeBack();
+      f.pane.renderBlocks();
+      await wait(220);
+      img = document.querySelector('#preview .split-right img.note-img');
+      r = img.getBoundingClientRect();
+      img.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2),
+      }));
+      await wait(100);
+      img.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+      await wait(220);
+      if (document.querySelector('#preview .split-right img.note-img')) fail('中线块图片退格没删掉');
+      if (!f.pane._blocks[0].right.inline.includes('前') || !f.pane._blocks[0].right.inline.includes('后')) {
+        fail('退格删图片把右侧文字吞了');
+      }
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      f.pane.renderBlocks();
+      await wait(160);
+    }
+    return '剪切图片 / 退格删除图片';
   });
 
   await run('拖动中线调整左右宽度并保存', async () => {

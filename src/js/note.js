@@ -423,6 +423,29 @@ export class NotePane {
     this.writeBack();
   }
 
+  /** 跨两侧的选区 / 输入可能同时改到两边，一次读回整块再写一次 */
+  syncSplitBlock(index) {
+    const blockEl = this.blkEl(index);
+    const block = this._blocks[index];
+    if (!blockEl || !block || block.type !== 'split') return;
+    let changed = false;
+    for (const sideName of ['left', 'right']) {
+      const sideEl = blockEl.querySelector(`.split-side[data-side="${sideName}"]`);
+      if (!sideEl) continue;
+      const txt = sideEl.querySelector('.split-txt');
+      const src = sideEl.querySelector('.split-source');
+      const old = this.splitSideData(block[sideName]);
+      if (txt) {
+        block[sideName] = { ...old, inline: htmlToInline(txt.innerHTML) };
+        changed = true;
+      } else if (src) {
+        block[sideName] = { ...old, src: src.value.replace(/\r\n?/g, '\n') };
+        changed = true;
+      }
+    }
+    if (changed) this.writeBack();
+  }
+
   focusSplitSide(index, side = 'left', where = 'start') {
     const blockEl = this.blkEl(index);
     const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
@@ -475,11 +498,17 @@ export class NotePane {
     this.refreshSplitSide(index, side, 'end');
   }
 
-  openSplitSideMenu(index, side, x, y) {
+  openSplitSideMenu(index, side, x, y, image) {
     this.closeBlockMenu();
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
-    menu.innerHTML = '<button data-act="split-cut">剪切这一侧</button>'
+    const imageActions = image
+      ? '<button data-act="split-copy-image">复制图片</button>'
+        + '<button data-act="split-copy-ref">复制图片引用</button>'
+        + '<button data-act="split-cut-image">剪切图片</button>'
+        + '<div class="sep"></div>'
+      : '';
+    menu.innerHTML = imageActions + '<button data-act="split-cut">剪切这一侧</button>'
       + '<button data-act="split-copy">复制这一侧</button>'
       + '<button data-act="split-paste">粘贴到这一侧</button>'
       + '<button data-act="split-select">全选这一侧</button>'
@@ -496,7 +525,12 @@ export class NotePane {
       if (btn.dataset.act === 'split-type') { this.openSplitTypeSubMenu(index, side, btn); return; }
       if (btn.dataset.act === 'split-color') { this.openSplitColorSubMenu(index, side, btn); return; }
       this.closeBlockMenu();
-      if (btn.dataset.act === 'split-cut') this.cutSplitSide(index, side);
+      if (btn.dataset.act === 'split-copy-image') this.copyImageElement(image, index);
+      else if (btn.dataset.act === 'split-copy-ref') {
+        const clip = window.tuyu && window.tuyu.clipboard;
+        if (clip && image && image.dataset.img) clip.write(`![[${image.dataset.img}]]`);
+      } else if (btn.dataset.act === 'split-cut-image') this.cutImageElement(image, index);
+      else if (btn.dataset.act === 'split-cut') this.cutSplitSide(index, side);
       else if (btn.dataset.act === 'split-copy') this.copySplitSide(index, side);
       else if (btn.dataset.act === 'split-paste') this.pasteSplitSide(index, side);
       else if (btn.dataset.act === 'split-select') this.selectSplitSide(index, side);
@@ -559,15 +593,6 @@ export class NotePane {
       return;
     }
     if (!sideEl) return;
-    this.focusSplitSide(index, side, 'end');
-    const txt = sideEl.querySelector('.split-txt');
-    if (!txt) return;
-    const range = document.createRange();
-    range.selectNodeContents(txt);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
     this.insertIntoSplitSide(sideEl, text);
   }
 
@@ -584,6 +609,7 @@ export class NotePane {
     sel.removeAllRanges();
     sel.addRange(range);
     this.markCurrent(sideEl.closest('.blk'));
+    this.markSplitSide(sideEl);
   }
 
   openSplitColorSubMenu(index, side, anchor) {
@@ -671,6 +697,20 @@ export class NotePane {
 
   onSplitKey(e, index, side) {
     const source = e.target && e.target.classList && e.target.classList.contains('split-source');
+    if (!source && (e.key === 'Backspace' || e.key === 'Delete')) {
+      const blockEl = this.blkEl(index);
+      const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
+      const txt = sideEl && sideEl.querySelector('.split-txt');
+      if (txt) {
+        const img = this.adjacentImage(txt, e.key === 'Backspace' ? -1 : 1);
+        if (img) {
+          e.preventDefault();
+          img.remove();
+          this.syncSplitSide(sideEl);
+          return;
+        }
+      }
+    }
     if (source) {
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -1671,7 +1711,7 @@ export class NotePane {
       || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
     if (sideEl) {
       this.markSplitSide(sideEl);
-      this.syncSplitSide(sideEl);
+      this.syncSplitBlock(Number(sideEl.closest('.blk-split').dataset.i));
       return;
     }
     const tableEl = (target && target.closest && target.closest('.blk-table'))
@@ -2466,7 +2506,13 @@ export class NotePane {
     const splitSide = e.target.closest && e.target.closest('.split-side');
     if (splitSide) {
       e.preventDefault();
-      this.openSplitSideMenu(Number(splitSide.closest('.blk-split').dataset.i), splitSide.dataset.side, e.clientX, e.clientY);
+      this.openSplitSideMenu(
+        Number(splitSide.closest('.blk-split').dataset.i),
+        splitSide.dataset.side,
+        e.clientX,
+        e.clientY,
+        e.target.closest('img.note-img'),
+      );
       return;
     }
     let blk = e.target.closest && e.target.closest('.blk');
@@ -3050,12 +3096,15 @@ export class NotePane {
     const clip = window.tuyu && window.tuyu.clipboard;
     if (clip) await clip.write(`![[${name}]]`);
     // 只删图片节点，不让 contenteditable 的整块清空把前后文字一起带走
+    const side = img.closest('.split-side');
     img.remove();
     this._focus = index;
     this._lastEdit = index;
-    this.syncInline(index);
+    if (side) this.syncSplitSide(side);
+    else this.syncInline(index);
     const blk = this.blkEl(index);
     if (blk) this.markCurrent(blk);
+    if (side) this.markSplitSide(side);
   }
 
   async cutBlock(index) {
@@ -4156,7 +4205,8 @@ export class NotePane {
     const blockEl = sideEl.closest('.blk-split');
     const index = blockEl ? Number(blockEl.dataset.i) : -1;
     const side = sideEl.dataset.side;
-    this.syncSplitSide(sideEl);
+    if (index >= 0) this.syncSplitBlock(index);
+    else this.syncSplitSide(sideEl);
     if (index >= 0) this.refreshSplitSide(index, side, 'end');
     return true;
   }
