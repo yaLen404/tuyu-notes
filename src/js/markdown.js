@@ -522,14 +522,16 @@ export function parseBlocks(md) {
       continue;
     }
 
-    const para = [line.trim()];
+    // 普通段落保留行首空格；否则在段首敲的空格会在重排后消失
+    const keepLeft = (s) => String(s).replace(/\s+$/g, '');
+    const para = [keepLeft(line)];
     i += 1;
     while (i < n && lines[i].trim()
            && !HEADING.test(lines[i]) && !HR.test(lines[i]) && !QUOTE.test(lines[i])
            && !BULLET.test(lines[i]) && !ORDERED.test(lines[i]) && !TASK.test(lines[i])
            && !lines[i].trim().startsWith('```') && !lines[i].trim().startsWith('$$')
            && !(lines[i].includes('|') && i + 1 < n && TABLE_SEP.test(lines[i + 1]))) {
-      para.push(lines[i].trim());
+      para.push(keepLeft(lines[i]));
       i += 1;
     }
     out.push({ start, end: i, type: 'p', inline: para.map(unescapeOrderedStart).join('\n') });

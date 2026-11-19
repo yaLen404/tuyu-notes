@@ -2871,6 +2871,34 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('普通段落的行首空格不会被吞掉', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '  前面有两个空格\n\n第二段';
+      f.pane.renderBlocks();
+      await wait(180);
+      if (!f.pane._blocks[0].inline.startsWith('  ')) fail('解析时行首空格就丢了');
+      f.pane.focusBlock(0, 'end');
+      const txt = document.querySelector('#preview .blk-txt');
+      txt.textContent = '  重新输入的空格';
+      txt.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '  ' }));
+      await wait(160);
+      if (!note.content.startsWith('  重新输入的空格')) fail('输入的行首空格没有写回：' + note.content);
+      f.pane.renderBlocks();
+      await wait(160);
+      if (!f.pane._blocks[0].inline.startsWith('  ')) fail('重排后行首空格又丢了');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '行首空格保留';
+  });
+
   await run('有序列表跨空行继续编号', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
