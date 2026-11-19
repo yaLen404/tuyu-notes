@@ -2412,8 +2412,10 @@ export class NotePane {
       if (act === 'type') { this.openTypeSubMenu(index, btn); return; }
       if (act === 'color') { this.openColorSubMenu(index, btn); return; }
       this.closeBlockMenu();
-      if (act === 'cut') this.cutBlock(index);
-      else if (act === 'copy') this.copyBlock(index);
+      if (act === 'cut') {
+        if (image) this.cutImageElement(image, index);
+        else this.cutBlock(index);
+      } else if (act === 'copy') this.copyBlock(index);
       else if (act === 'copy-image') this.copyImageElement(image, index);
       else if (act === 'copy-ref') {
         const clip = window.tuyu && window.tuyu.clipboard;
@@ -2835,6 +2837,21 @@ export class NotePane {
       await clip.write(this.blockText(Number.isInteger(index) ? index : this._focus));
     }
     return ok;
+  }
+
+  /** 剪切图片：只拿走这一张图，保留同一块里的前后文字 */
+  async cutImageElement(img, index) {
+    const name = img && img.dataset ? img.dataset.img : '';
+    if (!name) { this.cutBlock(index); return; }
+    const clip = window.tuyu && window.tuyu.clipboard;
+    if (clip) await clip.write(`![[${name}]]`);
+    // 只删图片节点，不让 contenteditable 的整块清空把前后文字一起带走
+    img.remove();
+    this._focus = index;
+    this._lastEdit = index;
+    this.syncInline(index);
+    const blk = this.blkEl(index);
+    if (blk) this.markCurrent(blk);
   }
 
   async cutBlock(index) {
