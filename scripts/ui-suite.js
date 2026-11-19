@@ -3139,6 +3139,49 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '左右两边都能插图';
   });
 
+  await run('拖动中线调整左右宽度并保存', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左\n\n右';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      const wrap = document.querySelector('#preview .split-wrap');
+      const divider = wrap.querySelector('.split-divider');
+      const r = wrap.getBoundingClientRect();
+      divider.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + 20,
+      }));
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true, clientX: r.left + r.width * 0.3, clientY: r.top + 20,
+      }));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await wait(220);
+      const block = f.pane._blocks[0];
+      if (Math.abs((block.splitRatio || 0.5) - 0.3) > 0.03) fail('拖动后宽度比例不对：' + block.splitRatio);
+      if (!wrap.style.getPropertyValue('--split-left')) fail('没有更新左侧宽度');
+      f.pane.renderBlocks();
+      await wait(180);
+      const wrap2 = document.querySelector('#preview .split-wrap');
+      if (!wrap2.style.getPropertyValue('--split-left').startsWith('30')) {
+        fail('重排后宽度没保留：' + wrap2.style.getPropertyValue('--split-left'));
+      }
+      wrap2.querySelector('.split-divider').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      await wait(160);
+      if (Math.abs((f.pane._blocks[0].splitRatio || 0.5) - 0.5) > 0.001) fail('双击没有恢复 50/50');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return '拖动 / 保存 / 双击恢复';
+  });
+
   await run('Ctrl+1/2/3 把当前块变成对应标题', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

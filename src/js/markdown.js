@@ -191,6 +191,9 @@ function splitMarker(block) {
     return out;
   };
   const payload = { left: clean(block.left), right: clean(block.right) };
+  if (Number.isFinite(Number(block.splitRatio))) {
+    payload.ratio = Math.max(0.2, Math.min(0.8, Number(block.splitRatio)));
+  }
   return '<!--fyn-split:' + encodeURIComponent(JSON.stringify(payload)) + '-->';
 }
 
@@ -509,6 +512,7 @@ export function parseBlocks(md) {
           start, end: i + 1, type: 'split',
           left: data.left && typeof data.left === 'object' ? data.left : { type: 'p', inline: '' },
           right: data.right && typeof data.right === 'object' ? data.right : { type: 'p', inline: '' },
+          splitRatio: Number.isFinite(Number(data.ratio)) ? Math.max(0.2, Math.min(0.8, Number(data.ratio))) : 0.5,
         });
         i += 1;
         continue;

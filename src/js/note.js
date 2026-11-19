@@ -65,6 +65,8 @@ export class NotePane {
       if (!inMenu && !inSub) this.closeBlockMenu();
     };
     dom.preview.addEventListener('click', (e) => this.onBlockClick(e));
+    dom.preview.addEventListener('pointerdown', (e) => this.onSplitDividerDown(e));
+    dom.preview.addEventListener('dblclick', (e) => this.onSplitDividerDblClick(e));
     dom.preview.addEventListener('focusin', (e) => this.onPreviewFocusIn(e));
     dom.preview.addEventListener('focusout', (e) => this.onPreviewFocusOut(e));
     dom.preview.addEventListener('input', (e) => this.onPreviewInput(e));
@@ -284,10 +286,11 @@ export class NotePane {
     if (this._sel && this._sel.has(i)) cls.push('sel');
     const pad = block.depth ? ` style="margin-left:${block.depth * 20}px"` : '';
     if (block.type === 'split') {
+      const ratio = this.splitRatio(block);
       return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="split"${pad}>`
-        + '<div class="split-wrap">'
+        + `<div class="split-wrap" style="--split-left:${(ratio * 100).toFixed(2)}%">`
         + this.splitSideHtml(block, 'left', i, exists)
-        + '<div class="split-divider" contenteditable="false"></div>'
+        + '<div class="split-divider" contenteditable="false" title="拖动调整左右宽度，双击恢复 50/50"></div>'
         + this.splitSideHtml(block, 'right', i, exists)
         + '</div></div>';
     }
@@ -316,6 +319,57 @@ export class NotePane {
     return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="inline"${pad}>`
       + marker
       + `<div class="blk-txt"${ce}>${blockToHtml(block, exists)}</div></div>`;
+  }
+
+  onSplitDividerDown(e) {
+    const divider = e.target.closest && e.target.closest('.split-divider');
+    if (!divider || (e.button != null && e.button !== 0)) return;
+    const blockEl = divider.closest('.blk-split');
+    const wrap = divider.closest('.split-wrap');
+    const index = blockEl ? Number(blockEl.dataset.i) : -1;
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split' || !wrap) return;
+    if (getComputedStyle(wrap).flexDirection === 'column') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = wrap.getBoundingClientRect();
+    if (!rect.width) return;
+    const move = (ev) => {
+      const ratio = Math.max(0.15, Math.min(0.85, (ev.clientX - rect.left) / rect.width));
+      block.splitRatio = ratio;
+      wrap.style.setProperty('--split-left', `${(ratio * 100).toFixed(2)}%`);
+    };
+    const finish = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      document.body.classList.remove('split-resizing');
+      this.writeBack({ forceHistory: true });
+    };
+    this._splitDrag = { index, block };
+    document.body.classList.add('split-resizing');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  }
+
+  onSplitDividerDblClick(e) {
+    const divider = e.target.closest && e.target.closest('.split-divider');
+    if (!divider) return;
+    const blockEl = divider.closest('.blk-split');
+    const wrap = divider.closest('.split-wrap');
+    const index = blockEl ? Number(blockEl.dataset.i) : -1;
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split' || !wrap) return;
+    e.preventDefault();
+    block.splitRatio = 0.5;
+    wrap.style.setProperty('--split-left', '50%');
+    this.writeBack({ forceHistory: true });
+  }
+
+  splitRatio(block) {
+    const n = Number(block && block.splitRatio);
+    return Number.isFinite(n) ? Math.max(0.2, Math.min(0.8, n)) : 0.5;
   }
 
   splitSideData(side) {
