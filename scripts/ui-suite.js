@@ -3058,6 +3058,21 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
         clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
       }));
       await wait(160);
+      const copySide = document.querySelector('.blk-menu [data-act="split-copy"]');
+      if (!copySide) fail('中线块右键没有复制');
+      copySide.click();
+      await wait(200);
+      if (!(await window.tuyu.clipboard.read()).includes('右独立')) fail('中线块右键复制没有写入剪贴板');
+      right.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
+      }));
+      await wait(160);
+      right.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
+      }));
+      await wait(160);
       const typeBtn = document.querySelector('.blk-menu [data-act="split-type"]');
       if (!typeBtn) fail('中线块右键没有块的格式');
       typeBtn.click();

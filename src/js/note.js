@@ -478,7 +478,8 @@ export class NotePane {
     this.closeBlockMenu();
     const menu = document.createElement('div');
     menu.className = 'blk-menu';
-    menu.innerHTML = '<button data-act="split-type" class="has-sub">块的格式<span class="sub-arrow">▸</span></button>'
+    menu.innerHTML = '<button data-act="split-copy">复制这一侧</button>'
+      + '<button data-act="split-type" class="has-sub">块的格式<span class="sub-arrow">▸</span></button>'
       + '<button data-act="split-del">删除中线块</button>';
     this.placeMenu(menu, x, y);
     this._menuEl = menu;
@@ -488,11 +489,28 @@ export class NotePane {
       if (!btn) return;
       if (btn.dataset.act === 'split-type') { this.openSplitTypeSubMenu(index, side, btn); return; }
       this.closeBlockMenu();
-      if (btn.dataset.act === 'split-del') this.removeBlock(index);
+      if (btn.dataset.act === 'split-copy') this.copySplitSide(index, side);
+      else if (btn.dataset.act === 'split-del') this.removeBlock(index);
     });
     const typeBtn = menu.querySelector('[data-act="split-type"]');
     typeBtn.addEventListener('mouseenter', () => this.openSplitTypeSubMenu(index, side, typeBtn));
     setTimeout(() => window.addEventListener('pointerdown', this._closeMenuOnOutside, true), 0);
+  }
+
+  async copySplitSide(index, side) {
+    const block = this._blocks[index];
+    if (!block || block.type !== 'split') return false;
+    const sideEl = this.blkEl(index) && this.blkEl(index).querySelector(`.split-side[data-side="${side}"]`);
+    const sel = window.getSelection();
+    const picked = sideEl && sel && !sel.isCollapsed && sideEl.contains(sel.anchorNode)
+      ? sel.toString()
+      : '';
+    const s = this.splitSideData(block[side]);
+    const text = picked || s.inline || s.src || '';
+    if (!text) return false;
+    const clip = window.tuyu && window.tuyu.clipboard;
+    if (clip) await clip.write(text);
+    return true;
   }
 
   openSplitTypeSubMenu(index, side, anchor) {
