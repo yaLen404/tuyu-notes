@@ -447,6 +447,10 @@ body.split-resizing { cursor: col-resize; user-select: none; }
 }
 .split-source:focus { border-color: var(--accent); }
 .split-hr { width: 100%; margin: 10px 0; border: 0; border-top: 1px solid var(--line); }
+/* 中线块只高亮当前正在编辑的一侧，不能两边同时亮 */
+.blk.cur .split-txt,
+.blk:focus-within .split-txt { background: transparent; }
+.split-side.active,
 .split-side:focus-within { background: rgba(139, 92, 246, .06); }
 .blk-split.cur .split-wrap { border-color: #3b3b3b; }
 .split-card-preview { display: flex; gap: 6px; }

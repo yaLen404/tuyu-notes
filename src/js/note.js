@@ -426,6 +426,7 @@ export class NotePane {
     const blockEl = this.blkEl(index);
     const sideEl = blockEl && blockEl.querySelector(`.split-side[data-side="${side}"]`);
     if (!sideEl) return false;
+    this.markSplitSide(sideEl);
     const src = sideEl.querySelector('.split-source');
     if (src) {
       src.focus();
@@ -1532,13 +1533,31 @@ export class NotePane {
   // ---------------------------------------------------------------- 编辑交互
   /** 光标落在哪一块，就给那一块加 .cur（替代原来的 :focus-within） */
   markCurrent(blk) {
-    if (blk === this._curEl) return;
+    if (blk === this._curEl) {
+      if (!blk) {
+        for (const side of this.dom.preview.querySelectorAll('.split-side.active')) side.classList.remove('active');
+      }
+      return;
+    }
     if (this._curEl) this._curEl.classList.remove('cur');
     this._curEl = blk || null;
     if (blk) {
       this._windowBlurred = false;
       blk.classList.add('cur');
     }
+    // 中线块只允许当前操作的一侧有编辑底色
+    for (const side of this.dom.preview.querySelectorAll('.split-side.active')) {
+      if (!blk || !blk.contains(side)) side.classList.remove('active');
+    }
+  }
+
+  markSplitSide(sideEl) {
+    const block = sideEl && sideEl.closest && sideEl.closest('.blk-split');
+    if (!block) return;
+    for (const side of block.querySelectorAll('.split-side.active')) {
+      if (side !== sideEl) side.classList.remove('active');
+    }
+    sideEl.classList.add('active');
   }
 
   paintCurrentBlock() {
@@ -1576,6 +1595,8 @@ export class NotePane {
     this._focus = Number(blk.dataset.i);
     this._lastEdit = this._focus;
     this.markCurrent(blk);
+    const side = target.closest('.split-side');
+    if (side) this.markSplitSide(side);
   }
 
   onPreviewFocusOut(e) {
@@ -1626,6 +1647,7 @@ export class NotePane {
     const sideEl = (target && target.closest && target.closest('.split-side'))
       || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
     if (sideEl) {
+      this.markSplitSide(sideEl);
       this.syncSplitSide(sideEl);
       return;
     }
@@ -2206,6 +2228,8 @@ export class NotePane {
       this._focus = index;
       this._lastEdit = index;
       this.markCurrent(blk);
+      const side = e.target.closest('.split-side');
+      if (side) this.markSplitSide(side);
       return;
     }
     if (blk.dataset.kind === 'source') { this.openSource(index); return; }

@@ -3047,6 +3047,14 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       const left = sides[0].querySelector('.split-txt');
       const right = sides[1].querySelector('.split-txt');
       if (!left || !right) fail('左右缺少可编辑文本');
+      f.pane.focusSplitSide(0, 'left', 'start');
+      await wait(120);
+      if (document.querySelectorAll('#preview .split-side.active').length !== 1) fail('两侧同时显示编辑状态');
+      if (!document.querySelector('#preview .split-left.active')) fail('左侧没有编辑状态');
+      f.pane.focusSplitSide(0, 'right', 'start');
+      await wait(120);
+      if (document.querySelectorAll('#preview .split-side.active').length !== 1) fail('切换后两侧同时显示编辑状态');
+      if (!document.querySelector('#preview .split-right.active')) fail('右侧没有编辑状态');
       left.textContent = '左独立';
       left.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '左独立' }));
       right.textContent = '右独立';
