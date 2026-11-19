@@ -1434,6 +1434,8 @@ export class NotePane {
     if (document.activeElement !== this.dom.preview) this.dom.preview.focus();
     const blk = img.closest('.blk');
     if (blk) this.markCurrent(blk);
+    const side = img.closest('.split-side');
+    if (side) this.markSplitSide(side);
     this._focus = index;
     this._lastEdit = index;
     return true;

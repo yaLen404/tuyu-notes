@@ -3183,6 +3183,14 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(300);
       let rightImg = document.querySelector('#preview .split-right img.note-img');
       if (!rightImg) fail('中线块右侧没有插入图片');
+      const ir = rightImg.getBoundingClientRect();
+      rightImg.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(ir.left + ir.width / 2), clientY: Math.round(ir.top + ir.height / 2),
+      }));
+      await wait(120);
+      if (!document.querySelector('#preview .split-right.active')) fail('点右侧图片后焦点跑到了左边');
+      if (document.querySelector('#preview .split-left.active')) fail('点右侧图片后左边仍处于编辑状态');
       f.pane.renderBlocks();
       await wait(200);
       leftImg = document.querySelector('#preview .split-left img.note-img');
