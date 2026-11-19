@@ -2680,10 +2680,15 @@ export class NotePane {
       this.mergeUp();
       return;
     }
-    // Tab / Shift+Tab：列表缩进、反缩进（Notion 的子项）
+    // Tab / Shift+Tab：列表缩进；普通正文插入 / 删除两个空格
     if (e.key === 'Tab') {
       e.preventDefault();
-      this.indentBlock(index, e.shiftKey ? -1 : 1);
+      const blk = this._blocks[index];
+      if (blk && ['bullet', 'num', 'task'].includes(blk.type)) {
+        this.indentBlock(index, e.shiftKey ? -1 : 1);
+      } else if (blk && ['p', 'quote', 'empty'].includes(blk.type)) {
+        this.insertTabInBlock(txt, e.shiftKey);
+      }
       return;
     }
     // ↑ / ↓ 在块边界上跨块移动光标
@@ -3298,6 +3303,52 @@ export class NotePane {
   }
 
   /** Tab / Shift+Tab：列表块缩进 / 反缩进 */
+  /** 普通正文 Tab：插入两个空格；Shift+Tab：退掉光标前最多两个空格 */
+  insertTabInBlock(txt, outdent) {
+    if (!txt) return false;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !txt.contains(sel.anchorNode)) return false;
+    const range = sel.getRangeAt(0);
+    if (!outdent) {
+      range.deleteContents();
+      const node = document.createTextNode('  ');
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      const node = range.startContainer;
+      if (node.nodeType === 3) {
+        const before = node.nodeValue.slice(0, range.startOffset);
+        const count = Math.min(2, (before.match(/ *$/) || [''])[0].length);
+        if (count) {
+          node.nodeValue = node.nodeValue.slice(0, range.startOffset - count)
+            + node.nodeValue.slice(range.startOffset);
+          range.setStart(node, range.startOffset - count);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } else {
+        const w = document.createTreeWalker(txt, NodeFilter.SHOW_TEXT);
+        const first = w.nextNode();
+        if (first && first.nodeValue.startsWith('  ')) {
+          first.nodeValue = first.nodeValue.slice(2);
+          range.setStart(first, 0);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+    }
+    const index = Number(txt.closest('.blk').dataset.i);
+    this.syncInline(index);
+    this._focus = index;
+    this._lastEdit = index;
+    return true;
+  }
+
   indentBlock(index, delta) {
     const blk = this._blocks[index];
     if (!blk) return;

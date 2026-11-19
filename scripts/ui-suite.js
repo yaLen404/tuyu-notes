@@ -2871,6 +2871,32 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '空代码块退格 / Delete → 整块删除';
   });
 
+  await run('正文 Tab 插入空格，Shift+Tab 退掉', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '正文内容';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.focusBlock(0, 'start');
+      const txt = document.querySelector('#preview .blk-txt');
+      keyOn(txt, 'Tab');
+      await wait(160);
+      if (!note.content.startsWith('  正文内容')) fail('Tab 没有插入空格：' + note.content);
+      keyOn(txt, 'Tab', { shiftKey: true });
+      await wait(160);
+      if (note.content.startsWith('  ')) fail('Shift+Tab 没有退掉空格：' + note.content);
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      await wait(160);
+    }
+    return 'Tab / Shift+Tab 作用于正文';
+  });
+
   await run('普通段落的行首空格不会被吞掉', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
