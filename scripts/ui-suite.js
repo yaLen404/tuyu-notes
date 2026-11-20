@@ -3167,6 +3167,57 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '两侧是普通块：输入 / 菜单 / 颜色 / 标题 / 代码';
   });
 
+  await run('中线块回车不拆到外面，删一侧保留另一侧', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左边';
+      f.pane.renderBlocks();
+      await wait(150);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      f.pane._blocks[1].inline = '右边';
+      f.pane.writeBack();
+      f.pane.renderBlocks();
+      await wait(180);
+      const left = document.querySelector('#preview .split-left .blk-txt');
+      f.pane.focusBlock(0, 'end');
+      left.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await wait(220);
+      if (f.pane._blocks.length !== 2) fail('回车把新块拆到了中线块外面：' + f.pane._blocks.length);
+      if (!document.querySelector('#preview .blk-split')) fail('回车把中线块拆没了');
+
+      const right = document.querySelector('#preview .split-right .blk-txt');
+      f.pane.focusBlock(1, 'start');
+      right.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+      await wait(180);
+      if (f.pane._blocks.length !== 2) fail('右侧块首退格合并了两个块');
+      if (f.pane._blocks[0].inline === '' || !f.pane._blocks[1].inline.includes('右边')) {
+        fail('右侧块首退格破坏了内容');
+      }
+
+      f.pane.focusBlock(0, 'end');
+      left.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+      await wait(180);
+      if (f.pane._blocks.length !== 2) fail('左侧块尾 Delete 合并了两个块');
+
+      f.pane.removeBlock(1);
+      await wait(220);
+      if (f.pane._blocks.length !== 1) fail('删除右侧后块数量不对：' + f.pane._blocks.length);
+      if (document.querySelector('#preview .blk-split')) fail('删除一侧后中线块没有消失');
+      if (!f.pane._blocks[0].inline.includes('左边')) fail('删除一侧把另一侧也删了');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      f.pane.renderBlocks();
+      await wait(160);
+    }
+    return '回车软换行 / 块首退格 / 块尾 Delete / 删一侧';
+  });
+
   await run('中线块左右两边都能插入图片', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
@@ -4297,6 +4348,62 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       if (f.pane._blocks.length < 2) fail('分割线后面没有补空段落');
       if (f.pane._focus === 0) fail('光标停在了分割线上');
       return '↑ / ↓ 跳过分割线；转换不弹输入框，末尾自动补段落';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+  });
+
+  await run('分割线能删掉：下一段块首退格 / 上一段块尾 Delete / 右键菜单', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(220);
+    const setup = async () => {
+      note.content = '上一段\n\n---\n\n下一段';
+      f.pane.renderBlocks();
+      await wait(200);
+      if (!document.querySelector('#preview .blk-hr')) fail('没有渲染出分割线');
+      f.pane._sel.clear();
+      f.pane.repaintSelection();
+    };
+    try {
+      // 1) 光标放在分割线下面那一段的开头，按退格
+      await setup();
+      f.pane.focusBlock(2, 'start');
+      await wait(140);
+      keyOn(document.querySelector('#preview .blk[data-i="2"] .blk-txt'), 'Backspace');
+      await wait(240);
+      if (document.querySelector('#preview .blk-hr')) fail('块首退格没删掉分割线');
+      if (f.pane._blocks.length !== 2) fail('退格后块数不对：' + f.pane._blocks.length);
+      if (!ws.note(note.id).content.includes('下一段')) fail('退格把下一段弄丢了');
+
+      // 2) 光标放在分割线上面那一段的末尾，按 Delete
+      await setup();
+      f.pane.focusBlock(0, 'end');
+      await wait(140);
+      keyOn(document.querySelector('#preview .blk[data-i="0"] .blk-txt'), 'Delete');
+      await wait(240);
+      if (document.querySelector('#preview .blk-hr')) fail('块尾 Delete 没删掉分割线');
+      if (!ws.note(note.id).content.includes('上一段')) fail('Delete 把上一段弄丢了');
+
+      // 3) 右键分割线 → 删除这一块
+      await setup();
+      const hrEl = document.querySelector('#preview .blk-hr');
+      const r = hrEl.getBoundingClientRect();
+      hrEl.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true, clientX: Math.round(r.left + 20), clientY: Math.round(r.top + 4),
+      }));
+      await wait(240);
+      const menu = document.querySelector('.blk-menu');
+      if (!menu) fail('右键分割线没有弹出菜单');
+      const del = menu.querySelector('[data-act="del"]');
+      if (!del) fail('右键菜单里没有删除');
+      del.click();
+      await wait(240);
+      if (document.querySelector('#preview .blk-hr')) fail('右键删除没生效');
+      return '退格 / Delete / 右键菜单三条路都能删掉分割线';
     } finally {
       note.content = original;
       f.pane.renderBlocks();

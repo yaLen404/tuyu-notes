@@ -1361,6 +1361,15 @@ export class NotePane {
     if (!cur || !next) return false;
     const caretPos = this._offIn(txt, r.endContainer, r.endOffset);
 
+    // 下一块是分割线：Delete 就是把这条线删掉，当前段原地不动
+    if (next.type === 'hr') {
+      this._blocks.splice(index + 1, 1);
+      this.writeBack({ forceHistory: true });
+      this.renderBlocks();
+      this.focusBlock(index, 'end');
+      return true;
+    }
+
     // 下一块是源码 / 代码：不强行并，先拦住浏览器的默认拆块
     if (next.type === 'code' || SOURCE_BLOCKS.includes(next.type)) return true;
 
@@ -1878,6 +1887,18 @@ export class NotePane {
     return true;
   }
 
+  /** 光标在块尾吗 */
+  caretAtBlockEnd(el) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return false;
+    const r = sel.getRangeAt(0);
+    if (!r.collapsed) return false;
+    const after = r.cloneRange();
+    after.selectNodeContents(el);
+    after.setStart(r.endContainer, r.endOffset);
+    return after.toString().length === 0 && after.innerHTML === '';
+  }
+
   /** 光标在块首吗 */
   caretAtBlockStart(el) {
     const sel = window.getSelection();
@@ -1989,8 +2010,16 @@ export class NotePane {
         if (ta) { ta.setSelectionRange(join, join); this.syncCodeScroll(ta); }
         return;
       }
+      if (prev.type === 'hr') {
+        // 上一块是分割线：没有文字可并，块首退格 = 把这条线删掉，当前这段留下
+        this._blocks.splice(index - 1, 1);
+        this.writeBack({ forceHistory: true });
+        this.renderBlocks();
+        this.focusBlock(index - 1, 'start');
+        return;
+      }
       if (SOURCE_BLOCKS.includes(prev.type)) {
-        // 公式 / 表格 / 分割线没有可拼接的文字；宁可不合，也别吞掉这一段
+        // 公式 / 表格没有可拼接的文字；宁可不合，也别吞掉这一段
         return;
       }
       prev.inline = (prev.inline || '') + (prev.inline ? '\n' : '') + text;
@@ -2080,7 +2109,12 @@ export class NotePane {
     if (!blk) return;
     if (blk._splitGroup) {
       const group = blk._splitGroup;
-      this._blocks = this._blocks.filter((b) => b !== group.left && b !== group.right);
+      const sibling = group.left === blk ? group.right : group.left;
+      this._blocks = this._blocks.filter((b) => b !== blk);
+      if (sibling && this._blocks.includes(sibling)) {
+        delete sibling._splitGroup;
+        delete sibling._splitSide;
+      }
     } else {
       this._blocks.splice(index, 1);
     }
@@ -2586,16 +2620,30 @@ export class NotePane {
   deleteSelectedBlocks() {
     if (!this._sel.size) return false;
     const picked = this.selectedIndexes();
+    const chosen = new Set(picked);
     const remove = new Set(picked);
+    const promote = new Set();
     for (const i of picked) {
       const b = this._blocks[i];
       if (!b || !b._splitGroup) continue;
-      const li = this._blocks.indexOf(b._splitGroup.left);
-      const ri = this._blocks.indexOf(b._splitGroup.right);
-      if (li >= 0) remove.add(li);
-      if (ri >= 0) remove.add(ri);
+      const group = b._splitGroup;
+      const li = this._blocks.indexOf(group.left);
+      const ri = this._blocks.indexOf(group.right);
+      if (chosen.has(li) && chosen.has(ri)) {
+        if (li >= 0) remove.add(li);
+        if (ri >= 0) remove.add(ri);
+      } else {
+        const sibling = group.left === b ? group.right : group.left;
+        if (sibling) promote.add(sibling);
+      }
     }
     this._blocks = this._blocks.filter((b, i) => !remove.has(i));
+    for (const b of promote) {
+      if (this._blocks.includes(b)) {
+        delete b._splitGroup;
+        delete b._splitSide;
+      }
+    }
     if (!this._blocks.length) this._blocks.push({ type: 'empty', inline: '' });
     this._sel.clear();
     this.writeBack();
@@ -3312,6 +3360,8 @@ export class NotePane {
       return;
     }
     const index = Number(txt.closest('.blk').dataset.i);
+    const splitChild = Boolean(txt.closest('.split-side')
+      && this._blocks[index] && this._blocks[index]._splitGroup);
     // Ctrl+1/2/3：当前块（或选中的多块）直接变成对应级别的标题
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && ['1', '2', '3'].includes(e.key)) {
       e.preventDefault();
@@ -3367,8 +3417,13 @@ export class NotePane {
       this.convertBlock(index, 'code');
       return;
     }
-    // 回车 = 拆块；Shift+回车 = 同一块内软换行
+    // 回车 = 拆块；中线块的一侧只有一个块，回车改成块内软换行
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (splitChild) {
+        e.preventDefault();
+        this.insertSoftBreak(txt, index);
+        return;
+      }
       // 段首只写了 ``` / ```js：回车变代码块，光标进代码里
       if (this.tryFenceConvert(txt)) { e.preventDefault(); return; }
       e.preventDefault();
@@ -3380,6 +3435,12 @@ export class NotePane {
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && !e.shiftKey && this.deleteSelectedContent()) {
       e.preventDefault();
+      return;
+    }
+    if (splitChild && e.key === 'Delete' && !e.shiftKey && !e.ctrlKey && !e.metaKey
+      && this.caretAtBlockEnd(txt)) {
+      e.preventDefault();
+      if (this._blocks[index + 1]) this.focusBlock(index + 1, 'start');
       return;
     }
     if (e.key === 'Delete' && !e.shiftKey && !e.ctrlKey && !e.metaKey
@@ -3394,6 +3455,10 @@ export class NotePane {
     }
     if (e.key === 'Backspace' && this.caretAtBlockStart(txt)) {
       e.preventDefault();
+      if (splitChild) {
+        if (this._blocks[index - 1]) this.focusBlock(index - 1, 'end');
+        return;
+      }
       this.mergeUp();
       return;
     }
@@ -3990,6 +4055,10 @@ export class NotePane {
     const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
     if (!text) return;
     const index = Number(txt.closest('.blk').dataset.i);
+    if (txt.closest('.split-side') && this._blocks[index] && this._blocks[index]._splitGroup) {
+      this.insertIntoEditable(text);
+      return;
+    }
     // 带 Markdown 结构的整段内容：交给 parseBlocks，别按行拆成 p
     if (text.includes('\n') && this.looksLikeMarkdownPaste(text)) {
       this.pasteMarkdown(text, index);
@@ -4020,6 +4089,26 @@ export class NotePane {
   }
 
   /** Tab / Shift+Tab：列表块缩进 / 反缩进 */
+  /** 中线块的一侧只有一个普通块：回车按软换行处理，避免把新块拆到中线块外面 */
+  insertSoftBreak(txt, index) {
+    if (!txt) return false;
+    const sel = window.getSelection();
+    let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+    if (!range || !txt.contains(range.startContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(txt);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    const br = document.createElement('br');
+    range.insertNode(br);
+    range.setStartAfter(br);
+    range.collapse(true);
+    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    this.syncInline(index);
+    return true;
+  }
+
   /** 普通正文 Tab：插入两个空格；Shift+Tab：退掉光标前最多两个空格 */
   insertTabInBlock(txt, outdent) {
     if (!txt) return false;
