@@ -3167,6 +3167,40 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '两侧是普通块：输入 / 菜单 / 颜色 / 标题 / 代码';
   });
 
+  await run('中线块左侧公式只打开左侧源码框', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    try {
+      f.selectNote(note.id);
+      await wait(220);
+      note.content = '左边';
+      f.pane.renderBlocks();
+      await wait(150);
+      f.pane.convertBlock(0, 'split');
+      await wait(220);
+      f.pane.convertBlock(0, 'math');
+      await wait(220);
+      const math = document.querySelector('#preview .split-left .math-block, #preview .split-left .blk-math');
+      if (!math) fail('左侧没有公式块');
+      const r = math.getBoundingClientRect();
+      math.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true,
+        clientX: Math.round(r.left + 5), clientY: Math.round(r.top + 5),
+      }));
+      await wait(160);
+      if (!document.querySelector('#preview .blk-split')) fail('公式点击把整个中线块清掉了');
+      if (!document.querySelector('#preview .split-left .blk-editor')) fail('公式没有打开左侧源码框');
+      if (!document.querySelector('#preview .split-right')) fail('打开公式后右侧丢了');
+    } finally {
+      f.pane.show(null);
+      note.content = original;
+      f.selectNote(note.id);
+      f.pane.renderBlocks();
+      await wait(160);
+    }
+    return '公式源码框只替换左侧';
+  });
+
   await run('中线块回车不拆到外面，删一侧保留另一侧', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;

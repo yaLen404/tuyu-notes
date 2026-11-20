@@ -465,6 +465,11 @@ body.split-resizing { cursor: col-resize; user-select: none; }
 .split-card-preview i { display: none; }
 .split-card-preview > div { display: inline; }
 .split-card-preview > div + div::before { content: ' · '; }
+.split-card-kind {
+  display: inline-block; margin-right: 3px; padding: 0 4px;
+  border-radius: 3px; background: var(--hover); color: var(--muted);
+  font-size: .85em;
+}
 @media (max-width: 640px) {
   .split-wrap { flex-direction: column; }
   .split-side.split-left { flex: 1 1 auto; }

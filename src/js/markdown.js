@@ -254,7 +254,22 @@ export function renderBlocks(md, exists = () => true) {
     if (splitMatch) {
       try {
         const data = JSON.parse(decodeURIComponent(splitMatch[1]));
-        const side = (s) => (s && (s.inline || s.src) ? inline(String(s.inline || s.src), exists) : '');
+        const side = (s) => {
+          if (!s) return '';
+          if (s.type === 'table') {
+            const head = String(s.src || '').split('\n')[0] || '';
+            const cells = head.replace(/^\s*\|?/, '').replace(/\|?\s*$/, '').split('|')
+              .map((c) => c.trim()).filter(Boolean);
+            return '<span class="split-card-kind">表格</span> ' + inline(cells.join(' · '), exists);
+          }
+          if (s.type === 'code') {
+            const first = String(s.src || '').split('\n').find((l) => l.trim()) || '';
+            return '<span class="split-card-kind">代码</span> ' + inline(first.trim(), exists);
+          }
+          if (s.type === 'math') return '<span class="split-card-kind">公式</span>';
+          if (s.type === 'hr') return '<span class="split-card-kind">分割线</span>';
+          return s.inline ? inline(String(s.inline), exists) : '';
+        };
         out.push({
           start, end: i + 1,
           html: '<div class="split-card-preview"><div>' + side(data.left)
@@ -407,9 +422,19 @@ export function plainLines(md, limit = 12) {
     if (splitMatch) {
       try {
         const data = JSON.parse(decodeURIComponent(splitMatch[1]));
-        const text = [data.left && (data.left.inline || data.left.src),
-          data.right && (data.right.inline || data.right.src)]
-          .filter(Boolean).join(' ');
+        const plainSide = (s) => {
+          if (!s) return '';
+          if (s.type === 'table') {
+            const head = String(s.src || '').split('\n')[0] || '';
+            return head.replace(/^\s*\|?/, '').replace(/\|?\s*$/, '').split('|')
+              .map((c) => c.trim()).filter(Boolean).join(' · ');
+          }
+          if (s.type === 'code') return (String(s.src || '').split('\n').find((l) => l.trim()) || '').trim();
+          if (s.type === 'math') return '公式';
+          if (s.type === 'hr') return '分割线';
+          return s.inline || '';
+        };
+        const text = [plainSide(data.left), plainSide(data.right)].filter(Boolean).join(' ');
         if (text) out.push(String(text).replace(/\s{2,}/g, ' ').trim());
         if (out.length >= limit) break;
         continue;

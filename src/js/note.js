@@ -1157,7 +1157,8 @@ export class NotePane {
   }
 
   blkEl(index) {
-    return this.dom.preview.querySelector(`.blk[data-i="${index}"]`);
+    const all = [...this.dom.preview.querySelectorAll(`.blk[data-i="${index}"]`)];
+    return all.find((el) => !el.classList.contains('blk-split')) || all[0] || null;
   }
 
   editableEl(index) {
@@ -2295,7 +2296,7 @@ export class NotePane {
   commitSource() {
     const index = this._sourceIndex;
     if (index == null) return;
-    const ta = this.dom.preview.querySelector(`.blk[data-i="${index}"] .blk-editor`);
+    const ta = this.blkEl(index) && this.blkEl(index).querySelector('.blk-editor');
     const blk = this._blocks[index];
     if (ta && blk) blk.src = ta.value;
     this._sourceIndex = null;
@@ -2475,6 +2476,7 @@ export class NotePane {
 
   repaintSelection() {
     for (const el of this.dom.preview.querySelectorAll('.blk')) {
+      if (el.classList.contains('blk-split')) continue;
       el.classList.toggle('sel', this._sel.has(Number(el.dataset.i)));
     }
   }
@@ -4295,7 +4297,8 @@ export class NotePane {
       return idx >= 0 ? this.codeInput(idx) : null;
     }
     if (this._sourceIndex != null) {
-      return this.dom.preview.querySelector(`.blk[data-i="${this._sourceIndex}"] .blk-editor`);
+      const srcEl = this.blkEl(this._sourceIndex);
+      return srcEl && srcEl.querySelector('.blk-editor');
     }
     // 单宿主：输入焦点在 #preview 上，具体块由选区决定
     const cur = this.currentBlockEl();
