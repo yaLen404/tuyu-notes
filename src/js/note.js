@@ -2180,6 +2180,7 @@ export class NotePane {
         : String(blk.inline || ''));
 
     if (type === 'split') {
+      if (blk._splitGroup) return;
       const pair = this.makeSplitPair(text);
       this._blocks.splice(index, 1, ...pair);
       this.writeBack();
@@ -2979,10 +2980,12 @@ export class NotePane {
       ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'],
       ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['table', '表格'], ['split', '中线块'], ['hr', '分割线'],
     ];
+    const targetBlock = !Array.isArray(target) ? this._blocks[target] : null;
+    const visible = items.filter(([t]) => !(t === 'split' && targetBlock && targetBlock._splitGroup));
     const sub = document.createElement('div');
     sub.className = 'blk-menu slash sub';
     if (Array.isArray(target) && target.length > 1) sub.dataset.batch = '1';
-    sub.innerHTML = items.map(([t, label]) => '<button data-type="' + t + '">' + label + '</button>').join('');
+    sub.innerHTML = visible.map(([t, label]) => '<button data-type="' + t + '">' + label + '</button>').join('');
     this.placeSubMenu(sub, anchor);
     this._subEl = sub;
     sub.addEventListener('mousedown', (ev) => ev.preventDefault());
@@ -3036,7 +3039,8 @@ export class NotePane {
     }
 
     if (type === 'split') {
-      const picked = new Set(idxs);
+      const picked = new Set(idxs.filter((i) => !this._blocks[i] || !this._blocks[i]._splitGroup));
+      if (!picked.size) return;
       const next = [];
       this._blocks.forEach((b, i) => {
         if (picked.has(i)) next.push(...this.makeSplitPair(textOf(b)));

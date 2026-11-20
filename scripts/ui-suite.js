@@ -3147,6 +3147,16 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(160);
       if (!f.pane._blocks[1].src.includes('const side = 1;')) fail('代码块内容没有写回');
       if (!document.querySelector('#preview .split-right .blk-code')) fail('重排后代码块丢了');
+
+      f.pane.convertBlock(1, 'table');
+      await wait(220);
+      const sideTable = document.querySelector('#preview .split-right .blk-table .note-table');
+      if (!sideTable) fail('右侧没有变成真正的表格块');
+      const cell = sideTable.querySelector('td');
+      cell.textContent = '单元格';
+      cell.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '单元格' }));
+      await wait(180);
+      if (!f.pane._blocks[1].src.includes('单元格')) fail('表格单元格没有写回');
     } finally {
       f.pane.show(null);
       note.content = original;
