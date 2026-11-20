@@ -66,6 +66,7 @@ export class NotePane {
     };
     dom.preview.addEventListener('click', (e) => this.onBlockClick(e));
     dom.preview.addEventListener('pointerdown', (e) => this.onSplitDividerDown(e));
+    dom.preview.addEventListener('mousedown', (e) => this.onRuleMouseDown(e));
     dom.preview.addEventListener('dblclick', (e) => this.onSplitDividerDblClick(e));
     dom.preview.addEventListener('focusin', (e) => this.onPreviewFocusIn(e));
     dom.preview.addEventListener('focusout', (e) => this.onPreviewFocusOut(e));
@@ -220,8 +221,18 @@ export class NotePane {
     this._blocks = blocks;
     this.renumber();
     const editable = true;
-    const body = blocks.map((b, i) => this.blockHtml(b, i, editable, exists)).join('');
-    this.dom.preview.innerHTML = body;
+    const seenSplit = new Set();
+    const body = [];
+    blocks.forEach((b, i) => {
+      if (b._splitGroup) {
+        if (seenSplit.has(b._splitGroup)) return;
+        seenSplit.add(b._splitGroup);
+        body.push(this.splitGroupHtml(b._splitGroup, i, exists));
+      } else {
+        body.push(this.blockHtml(b, i, editable, exists));
+      }
+    });
+    this.dom.preview.innerHTML = body.join('');
     this.syncScale();
     this.initCodeEditors();
     this.markTopHeading();
@@ -280,6 +291,30 @@ export class NotePane {
     }
   }
 
+  splitGroupHtml(group, firstIndex, exists) {
+    const left = group && group.left;
+    const right = group && group.right;
+    const li = this._blocks.indexOf(left);
+    const ri = this._blocks.indexOf(right);
+    if (!left || !right || li < 0 || ri < 0) return '';
+    const ratio = Number.isFinite(Number(group.ratio)) ? Math.max(0.15, Math.min(0.85, Number(group.ratio))) : 0.5;
+    return `<div class="blk blk-split" data-kind="split" data-i="${li}" data-split-group="1">`
+      + `<div class="split-wrap" style="--split-left:${(ratio * 100).toFixed(2)}%">`
+      + `<div class="split-side split-left" data-side="left">${this.blockHtml(left, li, true, exists)}</div>`
+      + '<div class="split-divider" contenteditable="false" title="拖动调整左右宽度，双击恢复 50/50"></div>'
+      + `<div class="split-side split-right" data-side="right">${this.blockHtml(right, ri, true, exists)}</div>`
+      + '</div></div>';
+  }
+
+  splitGroupMarker(group) {
+    return blockToLines({
+      type: 'split',
+      left: group.left,
+      right: group.right,
+      splitRatio: group.ratio,
+    });
+  }
+
   blockHtml(block, i, editable, exists) {
     const cls = ['blk', 'blk-' + block.type];
     // 空笔记（只有一块空的）才给占位提示，正文里的空块保持干净
@@ -302,6 +337,11 @@ export class NotePane {
     if (block.type === 'code') {
       return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="code" data-lang="${escapeHtml(block.lang || '')}"${pad}>`
         + this.codeEditorHtml() + '</div>';
+    }
+    if (block.type === 'hr') {
+      // 分割线是纯装饰块：没有可编辑的内容，也不许光标落进来
+      return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="hr" contenteditable="false"${pad}>`
+        + '<hr></div>';
     }
     if (SOURCE_BLOCKS.includes(block.type)) {
       return `<div class="${cls.join(' ')}" data-i="${i}" data-kind="source"${pad}>`
@@ -329,7 +369,8 @@ export class NotePane {
     const wrap = divider.closest('.split-wrap');
     const index = blockEl ? Number(blockEl.dataset.i) : -1;
     const block = this._blocks[index];
-    if (!block || block.type !== 'split' || !wrap) return;
+    const group = block && block._splitGroup;
+    if (!group || !wrap) return;
     if (getComputedStyle(wrap).flexDirection === 'column') return;
     e.preventDefault();
     e.stopPropagation();
@@ -337,7 +378,7 @@ export class NotePane {
     if (!rect.width) return;
     const move = (ev) => {
       const ratio = Math.max(0.15, Math.min(0.85, (ev.clientX - rect.left) / rect.width));
-      block.splitRatio = ratio;
+      group.ratio = ratio;
       wrap.style.setProperty('--split-left', `${(ratio * 100).toFixed(2)}%`);
     };
     const finish = () => {
@@ -347,7 +388,7 @@ export class NotePane {
       document.body.classList.remove('split-resizing');
       this.writeBack({ forceHistory: true });
     };
-    this._splitDrag = { index, block };
+    this._splitDrag = { index, group };
     document.body.classList.add('split-resizing');
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish);
@@ -361,11 +402,23 @@ export class NotePane {
     const wrap = divider.closest('.split-wrap');
     const index = blockEl ? Number(blockEl.dataset.i) : -1;
     const block = this._blocks[index];
-    if (!block || block.type !== 'split' || !wrap) return;
+    const group = block && block._splitGroup;
+    if (!group || !wrap) return;
     e.preventDefault();
-    block.splitRatio = 0.5;
+    group.ratio = 0.5;
     wrap.style.setProperty('--split-left', '50%');
     this.writeBack({ forceHistory: true });
+  }
+
+  makeSplitPair(text) {
+    const left = { type: 'p', inline: String(text || '') };
+    const right = { type: 'p', inline: '' };
+    const group = { ratio: 0.5, left, right };
+    left._splitGroup = group;
+    left._splitSide = 'left';
+    right._splitGroup = group;
+    right._splitSide = 'right';
+    return [left, right];
   }
 
   splitRatio(block) {
@@ -1198,6 +1251,14 @@ export class NotePane {
   focusBlockAtPoint(index, x, y) {
     const el = this.blkEl(index);
     if (!el) return false;
+    if (el.dataset.kind === 'hr') {
+      // 分割线不可编辑：点到它旁边的留白时，光标交给上 / 下一块
+      const box = el.getBoundingClientRect();
+      const dir = y > box.top + box.height / 2 ? 1 : -1;
+      const target = this.ruleNeighbor(index, dir);
+      if (target >= 0) this.focusBlock(target, dir > 0 ? 'start' : 'end');
+      return true;
+    }
     if (el.dataset.kind === 'source') { this.openSource(index); return true; }
     if (el.dataset.kind === 'split') {
       const mid = el.getBoundingClientRect();
@@ -1474,8 +1535,6 @@ export class NotePane {
     if (document.activeElement !== this.dom.preview) this.dom.preview.focus();
     const blk = img.closest('.blk');
     if (blk) this.markCurrent(blk);
-    const side = img.closest('.split-side');
-    if (side) this.markSplitSide(side);
     this._focus = index;
     this._lastEdit = index;
     return true;
@@ -1485,13 +1544,22 @@ export class NotePane {
   writeBack(opts = {}) {
     if (!this.note) return;
     this.syncCodeFromDom();
-    const sources = this._blocks.map((b) => blockToLines(b));
-    const content = sources.map((lines) => lines.join('\n')).join('\n\n');
+    const chunks = [];
+    const seenSplit = new Set();
+    for (const b of this._blocks) {
+      if (b._splitGroup) {
+        if (seenSplit.has(b._splitGroup)) continue;
+        seenSplit.add(b._splitGroup);
+        chunks.push(this.splitGroupMarker(b._splitGroup));
+      } else {
+        chunks.push(blockToLines(b));
+      }
+    }
+    const content = chunks.map((lines) => lines.join('\n')).join('\n\n');
     let line = 0;
-    this._blocks.forEach((b, i) => {
+    this._blocks.forEach((b) => {
       b.start = line;
-      b.end = line + sources[i].length;
-      line = b.end + 1;
+      b.end = line;
     });
     if (content === this.note.content) return;
     this.pushHistory(this.note.content, Boolean(opts.forceHistory));
@@ -1505,13 +1573,11 @@ export class NotePane {
    *  textarea 取回。正常非空内容不覆盖，避免重排/移动块时拿错块。 */
   syncCodeFromDom() {
     if (this._skipDomSync) return;
-    const dom = this.dom.preview.querySelectorAll(':scope > .blk');
-    if (dom.length !== this._blocks.length) return;
-    for (let i = 0; i < dom.length; i += 1) {
-      const el = dom[i];
+    for (let i = 0; i < this._blocks.length; i += 1) {
       const blk = this._blocks[i];
-      if (!blk || blk.type !== 'code' || blk.src || el.dataset.i !== String(i)
-        || !el.classList.contains('blk-code')) continue;
+      if (!blk || blk.type !== 'code' || blk.src) continue;
+      const el = this.dom.preview.querySelector(`.blk-code[data-i="${i}"]`);
+      if (!el) continue;
       const ta = el.querySelector('.code-input');
       if (ta && ta.value) blk.src = ta.value.replace(/\r\n?/g, '\n');
     }
@@ -1657,9 +1723,6 @@ export class NotePane {
     this._focus = Number(blk.dataset.i);
     this._lastEdit = this._focus;
     this.markCurrent(blk);
-    const side = target.closest('.split-side')
-      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
-    if (side) this.markSplitSide(side);
   }
 
   onPreviewFocusOut(e) {
@@ -1673,8 +1736,6 @@ export class NotePane {
       }, 0);
       return;
     }
-    const side = target.closest('.split-side');
-    if (side) { this.syncSplitSide(side); return; }
     const txt = target.closest('.blk-txt');
     if (!txt) return;
     const blk = txt.closest('.blk');
@@ -1706,13 +1767,6 @@ export class NotePane {
     if (target && target.classList) {
       if (target.classList.contains('code-input')) { this.onCodeInput(target); return; }
       if (target.classList.contains('code-lang')) { this.filterLangMenu(target.value); return; }
-    }
-    const sideEl = (target && target.closest && target.closest('.split-side'))
-      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
-    if (sideEl) {
-      this.markSplitSide(sideEl);
-      this.syncSplitBlock(Number(sideEl.closest('.blk-split').dataset.i));
-      return;
     }
     const tableEl = (target && target.closest && target.closest('.blk-table'))
       || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.blk-table'));
@@ -1794,8 +1848,6 @@ export class NotePane {
   insertIntoEditable(text) {
     const el = this.activeEditor();
     if (!el) return false;
-    const side = (el.closest && el.closest('.split-side')) || this.activeSplitSide();
-    if (side) return this.insertIntoSplitSide(side, text);
     if (el.tagName === 'TEXTAREA') {
       const start = el.selectionStart == null ? el.value.length : el.selectionStart;
       el.value = el.value.slice(0, start) + text + el.value.slice(el.selectionEnd == null ? start : el.selectionEnd);
@@ -1814,7 +1866,15 @@ export class NotePane {
     sel.removeAllRanges();
     sel.addRange(range);
     const blk = el.closest('.blk');
-    if (blk) this.syncInline(Number(blk.dataset.i));
+    if (blk) {
+      const index = Number(blk.dataset.i);
+      this.syncInline(index);
+      if (/!\[\[|!\[/.test(text)) {
+        this.writeBack();
+        this.renderBlocks();
+        this.focusBlock(index, 'end');
+      }
+    }
     return true;
   }
 
@@ -1974,6 +2034,13 @@ export class NotePane {
       this.focusSplitSide(index, 'left', where);
       return;
     }
+    if (blk.type === 'hr') {
+      // 分割线没有可编辑内容：↑ / ↓ 跨块时直接跳过它
+      const dir = where === 'start' ? 1 : -1;
+      const target = this.ruleNeighbor(index, dir);
+      if (target >= 0) this.focusBlock(target, where);
+      return;
+    }
     if (SOURCE_BLOCKS.includes(blk.type)) {
       this.openSource(index);
       return;
@@ -2011,7 +2078,12 @@ export class NotePane {
     if (!this.note) return;
     const blk = this._blocks[index];
     if (!blk) return;
-    this._blocks.splice(index, 1);
+    if (blk._splitGroup) {
+      const group = blk._splitGroup;
+      this._blocks = this._blocks.filter((b) => b !== group.left && b !== group.right);
+    } else {
+      this._blocks.splice(index, 1);
+    }
     if (!this._blocks.length) this._blocks.push({ type: 'empty', inline: '' });
     this.writeBack();
     this.renderBlocks();
@@ -2046,6 +2118,23 @@ export class NotePane {
     this.writeBack();
     this.renderBlocks();
     this.focusBlock(at, 'end');
+  }
+
+  /** 从 index 朝 dir 方向找最近的、能落光标的块（跳过分割线）；没有返回 -1 */
+  ruleNeighbor(index, dir) {
+    let i = index + dir;
+    while (i >= 0 && i < this._blocks.length) {
+      if (this._blocks[i].type !== 'hr') return i;
+      i += dir;
+    }
+    return -1;
+  }
+
+  /** 分割线插好之后：光标交给下一块；后面没有块就补一个空段落，别停在分割线上 */
+  focusAfterRule(index) {
+    const next = this.ruleNeighbor(index, 1);
+    if (next >= 0) this.focusBlock(next, 'start');
+    else this.appendBlock();
   }
 
   moveBlock(index, delta) {
@@ -2091,13 +2180,11 @@ export class NotePane {
         : String(blk.inline || ''));
 
     if (type === 'split') {
-      blk.type = 'split';
-      blk.left = { type: 'p', inline: text };
-      blk.right = { type: 'p', inline: '' };
-      delete blk.inline; delete blk.src; delete blk.lang; delete blk.done; delete blk.num; delete blk.depth;
+      const pair = this.makeSplitPair(text);
+      this._blocks.splice(index, 1, ...pair);
       this.writeBack();
       this.renderBlocks();
-      this.focusSplitSide(index, 'left', 'end');
+      this.focusBlock(index, 'end');
       return;
     }
     if (wasSplit) {
@@ -2128,6 +2215,7 @@ export class NotePane {
     this.writeBack();
     this.renderBlocks();
     if (type === 'table') this.focusTable(index, 'start');
+    else if (type === 'hr') this.focusAfterRule(index);
     else if (SOURCE_BLOCKS.includes(type)) this.openSource(index);
     else this.focusBlock(index, 'end');
   }
@@ -2137,6 +2225,7 @@ export class NotePane {
     const blk = this._blocks[index];
     const el = this.blkEl(index);
     if (!blk || !el) return;
+    if (blk.type === 'hr') return;      // 分割线没有源码可改
     if (blk.type === 'code') { this.focusCode(index, 'end'); return; }
     if (this._sourceIndex === index) return;
     this.commitSource();
@@ -2297,6 +2386,7 @@ export class NotePane {
       if (side) this.markSplitSide(side);
       return;
     }
+    if (blk.dataset.kind === 'hr') return;   // 分割线不可编辑（光标已在 mousedown 时交给相邻块）
     if (blk.dataset.kind === 'source') { this.openSource(index); return; }
     if (blk.dataset.kind === 'table') {
       // 浏览器点击单元格时已经放好光标，这里只记录当前块
@@ -2331,6 +2421,22 @@ export class NotePane {
   }
 
   onBlockDblClick() { /* 单击已经能进编辑，双击不再需要 */ }
+
+  /** 分割线不可编辑：按下时不让浏览器把光标落进去，光标交给上 / 下一块 */
+  onRuleMouseDown(e) {
+    const blk = e.target.closest && e.target.closest('.blk');
+    if (!blk || blk.dataset.kind !== 'hr') return;
+    // 右键留给上下文菜单，Shift / Ctrl 留给块多选
+    if ((e.button != null && e.button !== 0) || e.shiftKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    const index = Number(blk.dataset.i);
+    const box = blk.getBoundingClientRect();
+    const below = e.clientY > box.top + box.height / 2;
+    let target = this.ruleNeighbor(index, below ? 1 : -1);
+    if (target < 0) target = this.ruleNeighbor(index, below ? -1 : 1);
+    if (target < 0) return;
+    this.focusBlock(target, below ? 'start' : 'end');
+  }
 
   repaintSelection() {
     for (const el of this.dom.preview.querySelectorAll('.blk')) {
@@ -2478,8 +2584,17 @@ export class NotePane {
   /** 删掉选中的块（一块或多块） */
   deleteSelectedBlocks() {
     if (!this._sel.size) return false;
-    const idxs = this.selectedIndexes().reverse();
-    for (const i of idxs) this._blocks.splice(i, 1);
+    const picked = this.selectedIndexes();
+    const remove = new Set(picked);
+    for (const i of picked) {
+      const b = this._blocks[i];
+      if (!b || !b._splitGroup) continue;
+      const li = this._blocks.indexOf(b._splitGroup.left);
+      const ri = this._blocks.indexOf(b._splitGroup.right);
+      if (li >= 0) remove.add(li);
+      if (ri >= 0) remove.add(ri);
+    }
+    this._blocks = this._blocks.filter((b, i) => !remove.has(i));
     if (!this._blocks.length) this._blocks.push({ type: 'empty', inline: '' });
     this._sel.clear();
     this.writeBack();
@@ -2503,18 +2618,6 @@ export class NotePane {
   onPreviewContextMenu(e) {
     if (e.target.closest && e.target.closest('.code-lang')) return;   // 语言框交回系统
     if (e.target.closest && e.target.closest('.note-head, .empty-hint')) return;
-    const splitSide = e.target.closest && e.target.closest('.split-side');
-    if (splitSide) {
-      e.preventDefault();
-      this.openSplitSideMenu(
-        Number(splitSide.closest('.blk-split').dataset.i),
-        splitSide.dataset.side,
-        e.clientX,
-        e.clientY,
-        e.target.closest('img.note-img'),
-      );
-      return;
-    }
     let blk = e.target.closest && e.target.closest('.blk');
     // 点在块间空隙 / 最后一块下方空白 / 右栏空白：取最近的块，
     // 别因为没命中 .blk 就什么都不弹。
@@ -2874,7 +2977,7 @@ export class NotePane {
     const items = [
       ['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'],
       ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'],
-      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['split', '中线块'], ['hr', '分割线'],
+      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['table', '表格'], ['split', '中线块'], ['hr', '分割线'],
     ];
     const sub = document.createElement('div');
     sub.className = 'blk-menu slash sub';
@@ -2932,6 +3035,20 @@ export class NotePane {
       return;
     }
 
+    if (type === 'split') {
+      const picked = new Set(idxs);
+      const next = [];
+      this._blocks.forEach((b, i) => {
+        if (picked.has(i)) next.push(...this.makeSplitPair(textOf(b)));
+        else next.push(b);
+      });
+      this._blocks = next;
+      this.writeBack();
+      this.renderBlocks();
+      this._lastEdit = idxs[0];
+      return;
+    }
+
     for (const i of idxs) {
       const b = this._blocks[i];
       if (!b) continue;
@@ -2939,13 +3056,6 @@ export class NotePane {
       const wasCode = b.type === 'code';
       const wasTable = b.type === 'table';
       const wasSplit = b.type === 'split';
-      if (type === 'split') {
-        b.type = 'split';
-        b.left = { type: 'p', inline: text };
-        b.right = { type: 'p', inline: '' };
-        delete b.inline; delete b.src; delete b.lang; delete b.done; delete b.num; delete b.depth;
-        continue;
-      }
       if (type === 'code') {
         b.type = 'code';
         b.src = text;
@@ -3096,15 +3206,12 @@ export class NotePane {
     const clip = window.tuyu && window.tuyu.clipboard;
     if (clip) await clip.write(`![[${name}]]`);
     // 只删图片节点，不让 contenteditable 的整块清空把前后文字一起带走
-    const side = img.closest('.split-side');
     img.remove();
     this._focus = index;
     this._lastEdit = index;
-    if (side) this.syncSplitSide(side);
-    else this.syncInline(index);
+    this.syncInline(index);
     const blk = this.blkEl(index);
     if (blk) this.markCurrent(blk);
-    if (side) this.markSplitSide(side);
   }
 
   async cutBlock(index) {
@@ -3180,12 +3287,6 @@ export class NotePane {
         ta.selectionStart = ta.selectionEnd = start + 2;
         this.onSourceInput({ target: ta });
       }
-      return;
-    }
-    const splitEl = (e.target.closest && e.target.closest('.split-side'))
-      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
-    if (splitEl) {
-      this.onSplitKey(e, Number(splitEl.closest('.blk-split').dataset.i), splitEl.dataset.side);
       return;
     }
     const tableEl = (e.target.closest && e.target.closest('.blk-table'))
@@ -3873,16 +3974,6 @@ export class NotePane {
     if (!this.note) return;
     const file = this.imageFileOf(e.clipboardData);
     if (file) { e.preventDefault(); this.attachImage(file); return; }
-    const sideEl = (e.target.closest && e.target.closest('.split-side'))
-      || (this.currentBlockEl() && this.currentBlockEl().closest && this.currentBlockEl().closest('.split-side'));
-    if (sideEl) {
-      // 代码 / 公式 / 表格侧栏是 textarea，让浏览器自己粘贴，input 事件再写回
-      if (e.target.classList && e.target.classList.contains('split-source')) return;
-      e.preventDefault();
-      const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
-      if (text) this.insertIntoSplitSide(sideEl, text);
-      return;
-    }
     // 富文本块里只接受纯文本，别把外部的花样式带进来
     let txt = e.target.closest && e.target.closest('.blk-txt');
     if (!txt && e.target === this.dom.preview) {
@@ -4040,7 +4131,7 @@ export class NotePane {
     const items = [
       ['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'],
       ['bullet', '无序列表'], ['num', '有序列表'], ['task', '待办'],
-      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['split', '中线块'], ['hr', '分割线'],
+      ['quote', '引用'], ['code', '代码块'], ['math', '公式'], ['table', '表格'], ['split', '中线块'], ['hr', '分割线'],
     ];
     const menu = document.createElement('div');
     menu.className = 'blk-menu slash';
@@ -4215,8 +4306,6 @@ export class NotePane {
   insertText(text) {
     const el = this.activeEditor();
     if (!el) return;
-    const side = this.activeSplitSide() || (el.closest && el.closest('.split-side'));
-    if (side) { this.insertIntoSplitSide(side, text); return; }
     if (el.tagName === 'TEXTAREA') {
       const start = el.selectionStart == null ? el.value.length : el.selectionStart;
       const end = el.selectionEnd == null ? start : el.selectionEnd;

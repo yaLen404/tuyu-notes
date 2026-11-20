@@ -3029,13 +3029,13 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
     return '网格编辑 / Tab 跳格 / 末尾加行';
   });
 
-  await run('中线块左右独立编辑并能换格式', async () => {
+  await run('中线块两侧就是普通块，输入和格式完全独立', async () => {
     const note = ws.notesOf()[0];
     const original = note.content;
     try {
       f.selectNote(note.id);
       await wait(220);
-      note.content = '左边\n\n右边';
+      note.content = '左边文本';
       f.pane.renderBlocks();
       await wait(160);
       f.pane.convertBlock(0, 'split');
@@ -3044,128 +3044,117 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       if (!split) fail('没有生成中线块');
       const sides = [...split.querySelectorAll('.split-side')];
       if (sides.length !== 2) fail('中线块不是左右两边');
-      const left = sides[0].querySelector('.split-txt');
-      const right = sides[1].querySelector('.split-txt');
-      if (!left || !right) fail('左右缺少可编辑文本');
-      f.pane.focusSplitSide(0, 'left', 'start');
-      await wait(120);
-      if (document.querySelectorAll('#preview .split-side.active').length !== 1) fail('两侧同时显示编辑状态');
-      if (!document.querySelector('#preview .split-left.active')) fail('左侧没有编辑状态');
-      const activeSideBg = getComputedStyle(document.querySelector('#preview .split-left')).backgroundColor;
-      const activeTxtBg = getComputedStyle(document.querySelector('#preview .split-left .split-txt')).backgroundColor;
-      if (activeSideBg !== 'rgba(0, 0, 0, 0)' && activeSideBg !== 'transparent') {
-        fail('编辑底色铺满了整侧：' + activeSideBg);
-      }
-      if (activeTxtBg === 'rgba(0, 0, 0, 0)' || activeTxtBg === 'transparent') {
-        fail('实际编辑区域没有底色：' + activeTxtBg);
-      }
-      f.pane.focusSplitSide(0, 'right', 'start');
-      await wait(120);
-      if (document.querySelectorAll('#preview .split-side.active').length !== 1) fail('切换后两侧同时显示编辑状态');
-      if (!document.querySelector('#preview .split-right.active')) fail('右侧没有编辑状态');
-      left.textContent = '左独立';
-      left.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '左独立' }));
-      right.textContent = '右独立';
-      right.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右独立' }));
+      if (f.pane._blocks.length !== 2) fail('两侧不是两个普通块');
+      f.pane._blocks[1].inline = '右边文本';
+      f.pane.writeBack();
+      f.pane.renderBlocks();
       await wait(200);
-      // 真实输入事件的 target 是 #preview，必须仍然写回右侧
-      right.textContent = '右侧打字';
+      const leftBlk = document.querySelector('#preview .split-left .blk');
+      const rightBlk = document.querySelector('#preview .split-right .blk');
+      if (!leftBlk || !rightBlk) fail('两侧没有普通块 DOM');
+
+      f.pane.focusBlock(0, 'start');
+      await wait(100);
+      if (!leftBlk.classList.contains('cur')) fail('左侧没有成为当前块');
+      if (rightBlk.classList.contains('cur')) fail('两侧同时成为当前块');
+      f.pane.focusBlock(1, 'start');
+      await wait(100);
+      if (!rightBlk.classList.contains('cur')) fail('右侧没有成为当前块');
+      if (leftBlk.classList.contains('cur')) fail('切到右侧后左侧仍是当前块');
+
+      const leftTxt = leftBlk.querySelector('.blk-txt');
+      const rightTxt = rightBlk.querySelector('.blk-txt');
+      leftTxt.textContent = '左改';
+      leftTxt.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '左改' }));
+      rightTxt.textContent = '右改';
+      rightTxt.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右改' }));
+      await wait(180);
+      if (f.pane._blocks[0].inline !== '左改') fail('左侧没有独立写回');
+      if (f.pane._blocks[1].inline !== '右改') fail('右侧没有独立写回');
+
+      // 真实输入 target 是 #preview，右边仍然只写右边
+      rightTxt.textContent = '右侧打字';
       document.getElementById('preview').dispatchEvent(new InputEvent('input', {
         bubbles: true, inputType: 'insertText', data: '右侧打字',
       }));
-      await wait(180);
-      if (f.pane._blocks[0].left.inline !== '左独立') fail('编辑右侧时改到了左侧：' + f.pane._blocks[0].left.inline);
-      if (f.pane._blocks[0].right.inline !== '右侧打字') fail('右侧输入没有写回：' + f.pane._blocks[0].right.inline);
-      // 普通输入不应重建整个中线块
+      await wait(160);
+      if (f.pane._blocks[0].inline !== '左改') fail('右侧输入改到了左边');
+      if (f.pane._blocks[1].inline !== '右侧打字') fail('右侧输入没有写回');
+
+      // 普通输入不重建
       const origRender = f.pane.renderBlocks.bind(f.pane);
       let renders = 0;
       f.pane.renderBlocks = (...args) => { renders += 1; return origRender(...args); };
-      right.textContent = '右侧再输入';
+      rightTxt.textContent = '右侧再输入';
       document.getElementById('preview').dispatchEvent(new InputEvent('input', {
         bubbles: true, inputType: 'insertText', data: '右侧再输入',
       }));
       await wait(160);
       f.pane.renderBlocks = origRender;
-      if (renders !== 0) fail('右侧普通输入重建了整个块：' + renders);
-      right.textContent = '右独立';
-      right.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '右独立' }));
-      await wait(160);
-      const rr = right.getBoundingClientRect();
-      right.dispatchEvent(new MouseEvent('contextmenu', {
+      if (renders !== 0) fail('普通输入重建了整个块：' + renders);
+
+      // 右键菜单就是普通块菜单
+      const rr = rightBlk.getBoundingClientRect();
+      rightBlk.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true, cancelable: true,
         clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
       }));
       await wait(160);
-      const copySide = document.querySelector('.blk-menu [data-act="split-copy"]');
-      if (!copySide) fail('中线块右键没有复制');
-      copySide.click();
-      await wait(200);
-      if (!(await window.tuyu.clipboard.read()).includes('右独立')) fail('中线块右键复制没有写入剪贴板');
-      right.dispatchEvent(new MouseEvent('contextmenu', {
+      if (!document.querySelector('.blk-menu [data-act="copy"]')) fail('没有普通块的复制');
+      document.querySelector('.blk-menu [data-act="copy"]').click();
+      await wait(180);
+      if (!(await window.tuyu.clipboard.read()).includes('右侧再输入')) fail('复制没有写入剪贴板');
+
+      rightBlk.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true, cancelable: true,
         clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
       }));
       await wait(160);
-      const sideActions = [...document.querySelectorAll('.blk-menu [data-act^="split-"]')]
-        .map((b) => b.dataset.act);
-      for (const a of ['split-cut', 'split-copy', 'split-paste', 'split-select', 'split-color']) {
-        if (!sideActions.includes(a)) fail('中线块菜单缺少：' + a);
-      }
-      const colorBtn = document.querySelector('.blk-menu [data-act="split-color"]');
-      colorBtn.click();
+      document.querySelector('.blk-menu [data-act="color"]').click();
       await wait(120);
       const red = document.querySelector('.blk-menu.sub [data-color="#e06c75"]');
-      if (!red) fail('中线块没有颜色子菜单');
       red.click();
       await wait(180);
-      if (!document.querySelector('#preview .split-right .fyn-color')) fail('中线块侧栏没有上色');
-      right.dispatchEvent(new MouseEvent('contextmenu', {
+      if (!document.querySelector('#preview .split-right .fyn-color')) fail('普通块颜色没有作用到右侧');
+
+      const right2 = document.querySelector('#preview .split-right');
+      const rightBlk2 = right2.querySelector('.blk');
+      const r2 = rightBlk2.getBoundingClientRect();
+      rightBlk2.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true, cancelable: true,
-        clientX: Math.round(rr.left + 4), clientY: Math.round(rr.top + 8),
+        clientX: Math.round(r2.left + 4), clientY: Math.round(r2.top + 8),
       }));
       await wait(160);
-      const typeBtn = document.querySelector('.blk-menu [data-act="split-type"]');
-      if (!typeBtn) fail('中线块右键没有块的格式');
-      typeBtn.click();
+      document.querySelector('.blk-menu [data-act="type"]').click();
       await wait(120);
       const typeNames = [...document.querySelectorAll('.blk-menu.sub [data-type]')]
         .map((b) => b.dataset.type);
       for (const t of ['code', 'math', 'table', 'hr']) {
-        if (!typeNames.includes(t)) fail('中线块格式缺少：' + t);
+        if (!typeNames.includes(t)) fail('普通块格式缺少：' + t);
       }
-      const h3 = document.querySelector('.blk-menu.sub [data-type="h3"]');
-      if (!h3) fail('中线块格式子菜单没有标题 3');
-      h3.click();
+      document.querySelector('.blk-menu.sub [data-type="h3"]').click();
       await wait(220);
-      const split2 = document.querySelector('#preview .blk-split');
-      if (!split2.querySelector('.split-type-h3')) fail('右侧没有切换成标题 3');
-      if (split2.querySelector('.split-left .split-txt').textContent !== '左独立') fail('左边内容被右边影响');
-      if (split2.querySelector('.split-right .split-txt').textContent !== '右独立') fail('右边内容丢了');
-      f.pane.renderBlocks();
-      await wait(180);
-      const split3 = document.querySelector('#preview .blk-split');
-      if (!split3 || !split3.querySelector('.split-type-h3')) fail('重排后中线块/格式丢了');
+      if (!document.querySelector('#preview .split-right .blk-h3')) fail('右侧没有切换成普通标题块');
 
-      // 代码格式的侧栏用 source 输入框，内容也要能保存
-      f.pane.convertSplitSide(0, 'right', 'code');
-      await wait(200);
-      const codeSide = document.querySelector('#preview .split-right .split-source');
-      if (!codeSide) fail('中线块右侧代码格式没有源码输入框');
-      codeSide.value = 'const side = 1;';
-      codeSide.dispatchEvent(new Event('input', { bubbles: true }));
+      f.pane.convertBlock(1, 'code');
+      await wait(220);
+      const codeInput = document.querySelector('#preview .split-right .blk-code .code-input');
+      if (!codeInput) fail('右侧没有变成普通代码块');
+      codeInput.value = 'const side = 1;';
+      codeInput.dispatchEvent(new Event('input', { bubbles: true }));
       await wait(160);
       f.pane.renderBlocks();
       await wait(160);
-      if (document.querySelector('#preview .split-right .split-source').value !== 'const side = 1;') {
-        fail('中线块代码内容没有保存');
-      }
+      if (!f.pane._blocks[1].src.includes('const side = 1;')) fail('代码块内容没有写回');
+      if (!document.querySelector('#preview .split-right .blk-code')) fail('重排后代码块丢了');
     } finally {
       f.pane.show(null);
       note.content = original;
       f.selectNote(note.id);
+      f.pane.renderBlocks();
       await wait(160);
     }
-    return '左右独立 / 右侧转 h2 / 重排保留';
+    return '两侧是普通块：输入 / 菜单 / 颜色 / 标题 / 代码';
   });
 
   await run('中线块左右两边都能插入图片', async () => {
@@ -3179,14 +3168,14 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(160);
       f.pane.convertBlock(0, 'split');
       await wait(220);
-      f.pane.focusSplitSide(0, 'left', 'end');
+      f.pane.focusBlock(0, 'end');
       const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       await f.pane.attachImage(new File([bytes], 'split.png', { type: 'image/png' }));
       await wait(300);
       let leftImg = document.querySelector('#preview .split-left img.note-img');
       if (!leftImg) fail('中线块左侧没有插入图片');
-      f.pane.focusSplitSide(0, 'right', 'end');
+      f.pane.focusBlock(1, 'end');
       await f.pane.attachImage(new File([bytes], 'split2.png', { type: 'image/png' }));
       await wait(300);
       let rightImg = document.querySelector('#preview .split-right img.note-img');
@@ -3197,20 +3186,20 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
         clientX: Math.round(ir.left + ir.width / 2), clientY: Math.round(ir.top + ir.height / 2),
       }));
       await wait(120);
-      if (!document.querySelector('#preview .split-right.active')) fail('点右侧图片后焦点跑到了左边');
-      if (document.querySelector('#preview .split-left.active')) fail('点右侧图片后左边仍处于编辑状态');
+      if (!document.querySelector('#preview .split-right .blk.cur')) fail('点右侧图片后焦点跑到了左边');
+      if (document.querySelector('#preview .split-left .blk.cur')) fail('点右侧图片后左边仍处于编辑状态');
       rightImg.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true, cancelable: true,
         clientX: Math.round(ir.left + ir.width / 2), clientY: Math.round(ir.top + ir.height / 2),
       }));
       await wait(160);
-      for (const act of ['split-copy-image', 'split-copy-ref', 'split-cut-image']) {
-        if (!document.querySelector(`.blk-menu [data-act="${act}"]`)) fail('分割块图片菜单缺少：' + act);
+      for (const act of ['copy-image', 'copy-ref', 'cut']) {
+        if (!document.querySelector(`.blk-menu [data-act="${act}"]`)) fail('图片菜单缺少：' + act);
       }
-      const copyRef = document.querySelector('.blk-menu [data-act="split-copy-ref"]');
+      const copyRef = document.querySelector('.blk-menu [data-act="copy-ref"]');
       copyRef.click();
       await wait(180);
-      if (!(await window.tuyu.clipboard.read()).includes('img-')) fail('分割块复制图片引用没写剪贴板');
+      if (!(await window.tuyu.clipboard.read()).includes('img-')) fail('复制图片引用没写剪贴板');
       f.pane.renderBlocks();
       await wait(200);
       leftImg = document.querySelector('#preview .split-left img.note-img');
@@ -3236,18 +3225,18 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(160);
       f.pane.convertBlock(0, 'split');
       await wait(220);
-      f.pane.focusSplitSide(0, 'right', 'end');
-      const right = document.querySelector('#preview .split-right .split-txt');
+      f.pane.focusBlock(1, 'end');
+      const right = document.querySelector('#preview .split-right .blk-txt');
       const dt = new DataTransfer();
       dt.setData('text/plain', '![[img-paste-side.png]]');
       right.dispatchEvent(new ClipboardEvent('paste', {
         bubbles: true, cancelable: true, clipboardData: dt,
       }));
       await wait(300);
-      if (!f.pane._blocks[0].right.inline.includes('img-paste-side.png')) {
-        fail('粘贴没有写进右侧：' + f.pane._blocks[0].right.inline);
+      if (!f.pane._blocks[1].inline.includes('img-paste-side.png')) {
+        fail('粘贴没有写进右侧：' + f.pane._blocks[1].inline);
       }
-      if (f.pane._blocks[0].left.inline.includes('img-paste-side.png')) fail('粘贴跑到了左侧');
+      if (f.pane._blocks[0].inline.includes('img-paste-side.png')) fail('粘贴跑到了左侧');
       if (!document.querySelector('#preview .split-right img.note-img')) fail('右侧没有渲染粘贴的图片');
     } finally {
       f.pane.show(null);
@@ -3270,7 +3259,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       await wait(160);
       f.pane.convertBlock(0, 'split');
       await wait(220);
-      f.pane._blocks[0].right = { type: 'p', inline: '![[img-side-cut.png]]' };
+      f.pane._blocks[1].inline = '![[img-side-cut.png]]';
       f.pane.writeBack();
       f.pane.renderBlocks();
       await wait(220);
@@ -3282,14 +3271,14 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
         clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2),
       }));
       await wait(160);
-      const cut = document.querySelector('.blk-menu [data-act="split-cut-image"]');
-      if (!cut) fail('中线块图片菜单没有剪切图片');
+      const cut = document.querySelector('.blk-menu [data-act="cut"]');
+      if (!cut) fail('图片菜单没有剪切');
       cut.click();
       await wait(260);
       if (document.querySelector('#preview .split-right img.note-img')) fail('剪切图片后右侧图片还在');
-      if (f.pane._blocks[0].left.inline !== '左边') fail('剪切右侧图片影响到了左侧');
+      if (f.pane._blocks[0].inline !== '左边') fail('剪切右侧图片影响到了左侧');
 
-      f.pane._blocks[0].right = { type: 'p', inline: '前 ![[img-side-back.png]] 后' };
+      f.pane._blocks[1].inline = '前 ![[img-side-back.png]] 后';
       f.pane.writeBack();
       f.pane.renderBlocks();
       await wait(220);
@@ -3303,7 +3292,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       img.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
       await wait(220);
       if (document.querySelector('#preview .split-right img.note-img')) fail('中线块图片退格没删掉');
-      if (!f.pane._blocks[0].right.inline.includes('前') || !f.pane._blocks[0].right.inline.includes('后')) {
+      if (!f.pane._blocks[1].inline.includes('前') || !f.pane._blocks[1].inline.includes('后')) {
         fail('退格删图片把右侧文字吞了');
       }
     } finally {
@@ -3338,8 +3327,8 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       }));
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       await wait(220);
-      const block = f.pane._blocks[0];
-      if (Math.abs((block.splitRatio || 0.5) - 0.3) > 0.03) fail('拖动后宽度比例不对：' + block.splitRatio);
+      const group = f.pane._blocks[0]._splitGroup;
+      if (!group || Math.abs((group.ratio || 0.5) - 0.3) > 0.03) fail('拖动后宽度比例不对：' + (group && group.ratio));
       if (!wrap.style.getPropertyValue('--split-left')) fail('没有更新左侧宽度');
       f.pane.renderBlocks();
       await wait(180);
@@ -3349,7 +3338,7 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       }
       wrap2.querySelector('.split-divider').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       await wait(160);
-      if (Math.abs((f.pane._blocks[0].splitRatio || 0.5) - 0.5) > 0.001) fail('双击没有恢复 50/50');
+      if (Math.abs((f.pane._blocks[0]._splitGroup.ratio || 0.5) - 0.5) > 0.001) fail('双击没有恢复 50/50');
     } finally {
       f.pane.show(null);
       note.content = original;
@@ -4217,6 +4206,91 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       return '自动识别 javascript，手动 python 保持';
     } finally {
       await restoreNoteContent(note, original);
+    }
+  });
+
+  await run('分割线不可编辑：点它不会冒出输入框，光标交给相邻块', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(220);
+    try {
+      note.content = '上一段\n\n---\n\n下一段';
+      f.pane.renderBlocks();
+      await wait(200);
+      const hr = document.querySelector('#preview .blk-hr');
+      if (!hr) fail('没有渲染出分割线');
+      if (hr.dataset.kind !== 'hr') fail('分割线块类型不对：' + hr.dataset.kind);
+      if (hr.getAttribute('contenteditable') !== 'false') fail('分割线还是可编辑的');
+      const r = hr.getBoundingClientRect();
+      const x = Math.round(r.left + 24);
+      const y = Math.round(r.bottom - 2);
+      const target = document.elementFromPoint(x, y) || hr;
+      target.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y,
+      }));
+      hr.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+      await wait(200);
+      if (document.querySelector('#preview .blk-editor')) fail('点分割线打开了源码输入框');
+      if (document.querySelector('#preview .blk-hr.is-editing')) fail('分割线进入了编辑态');
+      if (document.querySelector('#preview .blk-hr textarea')) fail('分割线里出现了输入框');
+      if ((hr.textContent || '').trim()) fail('分割线被写进了文字：' + hr.textContent);
+      // 点在下半部分 → 光标应该落到下面那一段
+      const sel = window.getSelection();
+      const node = sel && sel.anchorNode;
+      const el = node ? (node.nodeType === 1 ? node : node.parentElement) : null;
+      const blkEl = el && el.closest ? el.closest('.blk') : null;
+      if (!blkEl) fail('光标没有落到任何块里');
+      if (blkEl === hr) fail('光标还停在分割线上');
+      return '点分割线 → 光标到「' + (blkEl.textContent || '').trim().slice(0, 6) + '」，没有输入框';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
+    }
+  });
+
+  await run('分割线：↑ / ↓ 跳过它；转为分割线不会弹输入框', async () => {
+    const note = ws.notesOf()[0];
+    const original = note.content;
+    f.selectNote(note.id);
+    await wait(220);
+    try {
+      note.content = '第一段\n\n第二段\n\n第三段';
+      f.pane.renderBlocks();
+      await wait(180);
+      // 模拟右键「转为 → 分割线」
+      f.pane.convertBlock(1, 'hr');
+      await wait(200);
+      if (f.pane._blocks[1].type !== 'hr') fail('没有转成分割线');
+      if (document.querySelector('#preview .blk-editor')) fail('转换后又冒出了源码输入框');
+      const txt0 = document.querySelector('#preview .blk[data-i="0"] .blk-txt');
+      f.pane.focusBlock(0, 'end');
+      await wait(120);
+      keyOn(txt0, 'ArrowDown');
+      await wait(180);
+      if (f.pane._focus !== 2) fail('↓ 没有跳过分割线：_focus=' + f.pane._focus);
+      const txt2 = document.querySelector('#preview .blk[data-i="2"] .blk-txt');
+      f.pane.focusBlock(2, 'start');
+      await wait(120);
+      keyOn(txt2, 'ArrowUp');
+      await wait(180);
+      if (f.pane._focus !== 0) fail('↑ 没有跳过分割线：_focus=' + f.pane._focus);
+
+      // 最后一块转成分割线：自动补一个空段落，光标不停在分割线上
+      note.content = '唯一一段';
+      f.pane.renderBlocks();
+      await wait(160);
+      f.pane.convertBlock(0, 'hr');
+      await wait(200);
+      if (document.querySelector('#preview .blk-editor')) fail('末尾转分割线也弹出了输入框');
+      if (f.pane._blocks.length < 2) fail('分割线后面没有补空段落');
+      if (f.pane._focus === 0) fail('光标停在了分割线上');
+      return '↑ / ↓ 跳过分割线；转换不弹输入框，末尾自动补段落';
+    } finally {
+      note.content = original;
+      f.pane.renderBlocks();
+      await wait(140);
     }
   });
 

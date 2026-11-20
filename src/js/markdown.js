@@ -188,6 +188,7 @@ function splitMarker(block) {
     }
     if (side.depth) out.depth = side.depth;
     if (type === 'task') out.done = Boolean(side.done);
+    if (type === 'num') out.num = Number(side.num) || 1;
     return out;
   };
   const payload = { left: clean(block.left), right: clean(block.right) };
@@ -195,6 +196,21 @@ function splitMarker(block) {
     payload.ratio = Math.max(0.2, Math.min(0.8, Number(block.splitRatio)));
   }
   return '<!--fyn-split:' + encodeURIComponent(JSON.stringify(payload)) + '-->';
+}
+function sideToBlock(side) {
+  const s = side && typeof side === 'object' ? side : {};
+  const type = SPLIT_TYPES.includes(s.type) ? s.type : 'p';
+  const b = { type };
+  if (['code', 'math', 'table'].includes(type)) {
+    b.src = String(s.src || '');
+    if (type === 'code') b.lang = String(s.lang || '');
+  } else if (type !== 'hr') {
+    b.inline = String(s.inline || '');
+    if (s.depth) b.depth = s.depth;
+    if (type === 'task') b.done = Boolean(s.done);
+    if (type === 'num') b.num = Number(s.num) || 1;
+  }
+  return b;
 }
 
 function splitRow(line) {
@@ -508,12 +524,18 @@ export function parseBlocks(md) {
     if (splitMatch) {
       try {
         const data = JSON.parse(decodeURIComponent(splitMatch[1]));
-        out.push({
-          start, end: i + 1, type: 'split',
-          left: data.left && typeof data.left === 'object' ? data.left : { type: 'p', inline: '' },
-          right: data.right && typeof data.right === 'object' ? data.right : { type: 'p', inline: '' },
-          splitRatio: Number.isFinite(Number(data.ratio)) ? Math.max(0.2, Math.min(0.8, Number(data.ratio))) : 0.5,
-        });
+        const group = {
+          ratio: Number.isFinite(Number(data.ratio)) ? Math.max(0.2, Math.min(0.8, Number(data.ratio))) : 0.5,
+        };
+        const left = sideToBlock(data.left);
+        const right = sideToBlock(data.right);
+        left._splitGroup = group;
+        left._splitSide = 'left';
+        right._splitGroup = group;
+        right._splitSide = 'right';
+        group.left = left;
+        group.right = right;
+        out.push(left, right);
         i += 1;
         continue;
       } catch (_e) { /* 坏标记按普通段落处理 */ }

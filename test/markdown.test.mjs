@@ -12,11 +12,11 @@ test('中线块：左右内容和格式能往返保存', () => {
   };
   const md = blockToLines(block).join('\n');
   const back = parseBlocks(md);
-  assert.equal(back.length, 1);
-  assert.equal(back[0].type, 'split');
-  assert.equal(back[0].left.inline, '左边');
-  assert.equal(back[0].right.type, 'h2');
-  assert.equal(back[0].right.inline, '**右边**');
+  assert.equal(back.length, 2);
+  assert.equal(back[0].inline, '左边');
+  assert.equal(back[1].type, 'h2');
+  assert.equal(back[1].inline, '**右边**');
+  assert.ok(back[0]._splitGroup && back[1]._splitGroup);
 });
 
 test('普通段落里手写的 1. 不会被存成有序列表', () => {
