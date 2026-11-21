@@ -2911,9 +2911,10 @@ export class NotePane {
       if (!blk || blk.type === 'code' || SOURCE_BLOCKS.includes(blk.type)) continue;
       const txt = this.editableEl(i);
       if (!txt) continue;
-      let inner = txt.innerHTML;
-      const old = txt.querySelector(':scope > span.fyn-color');
-      if (old) inner = old.innerHTML;
+      const holder = document.createElement('div');
+      holder.innerHTML = txt.innerHTML;
+      this.unwrapColorWrappers(holder);
+      const inner = holder.innerHTML;
       if (!inner.trim()) continue;
       txt.innerHTML = isDefault
         ? inner
@@ -2927,6 +2928,15 @@ export class NotePane {
     return true;
   }
 
+  /** 反复拆掉所有颜色包装，只保留文字和原有行内格式 */
+  unwrapColorWrappers(root) {
+    for (let pass = 0; pass < 20; pass += 1) {
+      const spans = [...root.querySelectorAll('.fyn-color')];
+      if (!spans.length) break;
+      for (const span of spans) span.replaceWith(...span.childNodes);
+    }
+  }
+
   /** 默认色：拆掉选中范围内已有的颜色包装，而不是再套一层 inherit */
   clearSelectionColor() {
     const sel = window.getSelection();
@@ -2934,7 +2944,6 @@ export class NotePane {
     const picked = sel.getRangeAt(0);
     if (picked.collapsed || !picked.toString()) return false;
     const affected = new Set();
-    // 可能之前叠了多层颜色，逐层拆到选区里不再有颜色包装
     for (let pass = 0; pass < 20; pass += 1) {
       const spans = [...this.dom.preview.querySelectorAll('.fyn-color')]
         .filter((span) => picked.intersectsNode(span));
@@ -2952,12 +2961,13 @@ export class NotePane {
     return true;
   }
 
-  /** 把当前选区按块拆开，只包住真正选中的文字 */
+  /** 把当前选区按块拆开，只包住真正选中的文字；新颜色覆盖旧颜色 */
   colorSelectedText(c) {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
     const picked = sel.getRangeAt(0);
     if (picked.collapsed || !picked.toString()) return false;
+    const isDefault = !c;
     const ranges = [];
     for (const el of this.dom.preview.querySelectorAll('.blk-txt')) {
       if (!picked.intersectsNode(el)) continue;
@@ -2978,13 +2988,27 @@ export class NotePane {
     }
     if (!ranges.length) return false;
     for (const { range, index } of ranges) {
-      const span = document.createElement('span');
-      span.className = 'fyn-color';
-      // 默认色也要写成明确的正文色，否则 inherit 会被外层颜色覆盖
-      span.dataset.color = c;
-      span.style.color = c;
-      span.appendChild(range.extractContents());
-      range.insertNode(span);
+      const frag = range.extractContents();
+      // 选中区域里旧的颜色包装先全部拆掉，再套新颜色
+      this.unwrapColorWrappers(frag);
+      if (isDefault) {
+        range.insertNode(frag);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'fyn-color';
+        span.dataset.color = c;
+        span.style.color = c;
+        span.appendChild(frag);
+        range.insertNode(span);
+        // 新颜色覆盖选区里旧的外层颜色，避免出现嵌套 token
+        const ancestors = [];
+        let parent = span.parentElement;
+        while (parent && parent.nodeType === 1) {
+          if (parent.classList.contains('fyn-color')) ancestors.push(parent);
+          parent = parent.parentElement;
+        }
+        for (const old of ancestors) old.replaceWith(...old.childNodes);
+      }
       this.refreshInlineFromDom(index);
     }
     this.writeBack({ forceHistory: true });

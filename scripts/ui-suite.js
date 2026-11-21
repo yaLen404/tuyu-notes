@@ -3583,9 +3583,28 @@ await run('只选一块也能右键（选中不会被清掉）', async () => {
       const colored2 = document.querySelector('#preview .fyn-color');
       if (!colored2 || colored2.textContent !== '彩色') fail('重新渲染后颜色丢了/范围变了');
 
-      // 选回已染色的文字 → 默认色，必须能覆盖掉原来的红色
+      // 重新染成蓝色：必须覆盖红色，而不是套一层
+      const rb = document.createRange();
+      rb.selectNodeContents(colored2);
+      const sb = window.getSelection();
+      sb.removeAllRanges();
+      sb.addRange(rb);
+      f.pane.openBlockContextMenu(0, 120, 160);
+      await wait(100);
+      document.querySelector('.blk-menu [data-act="color"]').click();
+      await wait(80);
+      document.querySelector('.color-sub [data-color="#61afef"]').click();
+      await wait(180);
+      const blue = document.querySelector('#preview .fyn-color');
+      if (document.querySelectorAll('#preview .fyn-color').length !== 1) {
+        fail('重新染色产生了嵌套颜色：' + note.content + ' / ' + document.querySelector('#preview').innerHTML);
+      }
+      if (!blue || blue.textContent !== '彩色') fail('重新染色范围不对');
+      if (getComputedStyle(blue).color !== 'rgb(97, 175, 239)') fail('新颜色没有覆盖旧颜色');
+
+      // 选回已染色的文字 → 默认色，必须能覆盖掉原来的颜色
       const r2 = document.createRange();
-      r2.selectNodeContents(colored2);
+      r2.selectNodeContents(blue);
       const s2 = window.getSelection();
       s2.removeAllRanges();
       s2.addRange(r2);
