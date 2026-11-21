@@ -28,6 +28,15 @@ test('普通段落里手写的 1. 不会被存成有序列表', () => {
   assert.equal(blocks[0].inline, '1. 这不是列表');
 });
 
+test('行内：嵌套颜色 token 能正确渲染', () => {
+  const html = inline('前面 {{color:#c678dd|外层 {{color:#98c379|内层}} 结尾}} 后面');
+  assert.ok(html.includes('fyn-color'));
+  assert.ok(!html.includes('{{color:'));
+  assert.ok(html.includes('外层'));
+  assert.ok(html.includes('内层'));
+  assert.ok(html.includes('后面'));
+});
+
 test('行内：双链区分存在与缺失', () => {
   const html = inline('看 [[甲]] 和 [[乙]]', (t) => t === '甲');
   assert.match(html, /class="wl" data-title="甲"/);

@@ -97,23 +97,53 @@ function autoSpaceHtml(text) {
 
 /** 行内：返回 HTML 片段。exists(title) 用来区分"链接目标是否存在"。
  *  递归调用必须用**独立的**正则实例，否则共享的 lastIndex 会把循环搞死。 */
-const COLOR_TOKEN = /\{\{color:([#a-zA-Z0-9]+)\|([\s\S]*?)\}\}/g;
 const safeColor = (value) => {
   const c = String(value || '').trim();
   return /^#[0-9a-f]{3,8}$/i.test(c) || /^[a-z]{3,20}$/i.test(c) ? c : '';
 };
 
+/** 颜色 token 可以嵌套，不能用非贪婪正则从外层直接吃到内层结尾 */
+function extractColorTokens(src, exists, colorHtml) {
+  const text = String(src);
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const start = text.indexOf('{{color:', i);
+    if (start < 0) { out += text.slice(i); break; }
+    out += text.slice(i, start);
+    const bar = text.indexOf('|', start + 8);
+    if (bar < 0) { out += text.slice(start); break; }
+    const c = safeColor(text.slice(start + 8, bar));
+    if (!c) {
+      out += text.slice(start, start + 8);
+      i = start + 8;
+      continue;
+    }
+    let depth = 1;
+    let j = bar + 1;
+    while (j < text.length) {
+      if (text.startsWith('{{color:', j)) { depth += 1; j += 8; continue; }
+      if (text.startsWith('}}', j)) {
+        depth -= 1;
+        if (!depth) break;
+        j += 2;
+        continue;
+      }
+      j += 1;
+    }
+    if (depth) { out += text.slice(start); break; }
+    colorHtml.push(`<span class="fyn-color" data-color="${escapeHtml(c)}" style="color:${c}">`
+      + `${inline(text.slice(bar + 1, j), exists)}</span>`);
+    out += `\uE000${colorHtml.length - 1}\uE001`;
+    i = j + 2;
+  }
+  return out;
+}
+
 export function inline(text, exists = () => true) {
   let src = String(text == null ? '' : text);
   const colorHtml = [];
-  if (src.includes('{{color:')) {
-    src = src.replace(COLOR_TOKEN, (all, color, inner) => {
-      const c = safeColor(color);
-      if (!c) return all;
-      colorHtml.push(`<span class="fyn-color" data-color="${escapeHtml(c)}" style="color:${c}">${inline(inner, exists)}</span>`);
-      return `\uE000${colorHtml.length - 1}\uE001`;
-    });
-  }
+  if (src.includes('{{color:')) src = extractColorTokens(src, exists, colorHtml);
   const re = new RegExp(INLINE_SRC, 'g');
   let out = '';
   let pos = 0;
